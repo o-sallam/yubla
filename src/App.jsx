@@ -9,6 +9,14 @@ function App() {
       ? import.meta.env.VITE_API_BASE.replace(/\/+$/, '')
       : (import.meta.env.PROD ? '' : 'http://localhost:3000');
     
+    // Debug logging
+    console.log('Environment:', {
+      VITE_API_BASE: import.meta.env.VITE_API_BASE,
+      PROD: import.meta.env.PROD,
+      MODE: import.meta.env.MODE,
+      apiBase: apiBase
+    });
+    
     window.__APP_API_BASE__ = apiBase;
     const runLegacy = new Function('API_BASE', legacyScript);
     runLegacy(apiBase);
