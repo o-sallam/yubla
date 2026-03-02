@@ -11,6 +11,11 @@
       "destination": "/api/:path*"
     }
   ],
+  "functions": {
+    "api/**/*.js": {
+      "includeFiles": "node_modules/sql.js/dist/*.wasm"
+    }
+  },
   "env": {
     "NODE_ENV": "production"
   }
