@@ -13,7 +13,7 @@
   ],
   "functions": {
     "api/**/*.js": {
-      "includeFiles": "node_modules/sql.js/dist/*.wasm"
+      "includeFiles": "{node_modules/sql.js/dist/*.wasm,yubla.sqlite}"
     }
   },
   "env": {
