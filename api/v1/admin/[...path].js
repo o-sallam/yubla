@@ -5,9 +5,9 @@ import {
   getTenantAssignmentsDb,
   replaceTenantAssignmentsDb,
   replaceTenantStudentsDb
-} from '../lib/db.js';
-import { hashPassword } from '../lib/security.js';
-import { withCors, withAuth, cleanText, sanitizeUser } from '../lib/middleware.js';
+} from '../../lib/db.js';
+import { hashPassword } from '../../lib/security.js';
+import { withCors, withAuth, cleanText, sanitizeUser } from '../../lib/middleware.js';
 
 async function adminHandler(req, res) {
   await initDb();

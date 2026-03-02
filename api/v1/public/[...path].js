@@ -1,5 +1,5 @@
-import { initDb, listTenantsDb } from '../lib/db.js';
-import { withCors } from '../lib/middleware.js';
+import { initDb, listTenantsDb } from '../../lib/db.js';
+import { withCors } from '../../lib/middleware.js';
 
 async function handler(req, res) {
   if (req.method !== 'GET') {

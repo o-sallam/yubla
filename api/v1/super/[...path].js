@@ -12,9 +12,9 @@ import {
   purgeSchoolDataDb,
   importTeachersRowsDb,
   importStudentsRowsDb
-} from '../lib/db.js';
-import { hashPassword } from '../lib/security.js';
-import { withCors, withAuth, cleanText, toNumber, sanitizeUser } from '../lib/middleware.js';
+} from '../../lib/db.js';
+import { hashPassword } from '../../lib/security.js';
+import { withCors, withAuth, cleanText, toNumber, sanitizeUser } from '../../lib/middleware.js';
 
 const normalizeTeacherImportRow = (row) => ({
   schoolName: cleanText(row?.schoolName || row?.school || row?.['اسم المدرسة'] || row?.['المدرسة']),

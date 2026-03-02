@@ -1,6 +1,6 @@
-import { initDb, findUserByUsernameDb, findTenantByCodeDb, findTenantByIdDb, findUserByIdDb, updateUserDb, saveSessionDb, deleteSessionDb } from '../lib/db.js';
-import { createSession, verifyPassword, hashPassword } from '../lib/security.js';
-import { withCors, withAuth, cleanText, sanitizeUser } from '../lib/middleware.js';
+import { initDb, findUserByUsernameDb, findTenantByCodeDb, findTenantByIdDb, findUserByIdDb, updateUserDb, saveSessionDb, deleteSessionDb } from '../../lib/db.js';
+import { createSession, verifyPassword, hashPassword } from '../../lib/security.js';
+import { withCors, withAuth, cleanText, sanitizeUser } from '../../lib/middleware.js';
 
 async function authHandler(req, res) {
   await initDb();
