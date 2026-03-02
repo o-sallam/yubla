@@ -120,10 +120,13 @@ yubla/
 
 ## Important Notes
 
-### Database Behavior
-- **Local Dev**: Database persists in `/data` directory
-- **Vercel**: Database copied to `/tmp` on cold start
-- **Production**: Consider migrating to persistent database (Postgres, MySQL)
+### ⚠️ Database Behavior - IMPORTANT!
+- **Local Dev**: Database persists in `/data` directory ✅
+- **Vercel**: Database copied to `/tmp` on cold start ⚠️
+- **Data Loss**: Data resets when function restarts (every ~5 min idle) ❌
+- **Production**: MUST migrate to persistent database (Postgres, MySQL) 🔴
+
+**Read [DATABASE_IMPORTANT.md](./DATABASE_IMPORTANT.md) for details!**
 
 ### CORS Configuration
 - Automatically configured for Vercel domains

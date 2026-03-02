@@ -1,98 +1,181 @@
-# Yubla Platform (Multi-School)
+# Yubla School Grades System
 
-نسخة مطورة من نظام إدخال العلامات تعمل كمنصة متعددة المدارس (Super Admin + School Admin + Teacher) باستخدام:
+A multi-tenant school grades management system built with React and serverless architecture, ready for Vercel deployment.
 
-- `frontend`: React + Vite (واجهة RTL عربية)
-- `backend`: Node.js + Express
-- SQLite عبر `sql.js` (بدون أدوات C++ أو Visual Studio)
+## 🚀 Quick Deploy
 
-## 1) تشغيل المشروع
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
 
-### Backend
 ```bash
-cd backend
-npm install
-npm start
+# Deploy in 30 seconds
+npm install -g vercel
+vercel --prod
 ```
 
-الخادم يعمل على: `http://localhost:4000`
+## ⚠️ Important: Database Notice
 
-### Frontend
+**Current Setup:** SQLite (resets on cold starts)
+- ✅ Perfect for: Demos, testing, development
+- ❌ Not for: Production with real users
+
+**For Production:** Migrate to Vercel Postgres
+- 📖 Read: [DATABASE_IMPORTANT.md](./DATABASE_IMPORTANT.md)
+- 🔄 Guide: [migrate-to-postgres.md](./migrate-to-postgres.md)
+
+## 📚 Documentation
+
+- **[QUICKSTART.md](./QUICKSTART.md)** - Deploy in 3 steps
+- **[SETUP_COMPLETE.md](./SETUP_COMPLETE.md)** - What was done
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Detailed deployment guide
+- **[README.vercel.md](./README.vercel.md)** - Full documentation
+- **[DATABASE_IMPORTANT.md](./DATABASE_IMPORTANT.md)** - Database behavior ⚠️
+
+## 🏗️ Architecture
+
+```
+Frontend (React + Vite)
+         ↓
+Serverless API (/api)
+         ↓
+SQLite Database (in /tmp)
+```
+
+## 📁 Project Structure
+
+```
+yubla/
+├── api/                    # Serverless API endpoints
+│   ├── lib/               # Shared utilities
+│   │   ├── db.js         # Database wrapper
+│   │   ├── db-full.js    # Full implementation
+│   │   ├── security.js   # Auth utilities
+│   │   └── middleware.js # CORS, auth helpers
+│   ├── v1/               # API v1 endpoints
+│   │   ├── auth/         # Login, logout, me
+│   │   ├── public/       # Public endpoints
+│   │   ├── lookups.js    # Dropdown data
+│   │   ├── students.js   # Student lists
+│   │   └── submissions.js # Grade submissions
+│   └── health.js         # Health check
+├── src/                   # Frontend React app
+├── backend/              # Original backend (reference)
+├── frontend/             # Original frontend (reference)
+├── yubla.sqlite          # Seed database
+├── vercel.json           # Vercel config
+└── package.json          # Dependencies
+```
+
+## 🔐 Default Credentials
+
+### Super Admin
+- Username: `super.admin`
+- Password: `Admin@123`
+
+### School Admin (Yubla)
+- Username: `admin.yubla`
+- Password: `Admin@123`
+- Tenant: `YUBLA`
+
+### Teacher (Yubla)
+- Username: `teacher.yubla`
+- Password: `Teacher@123`
+- Tenant: `YUBLA`
+
+## 🛠️ Local Development
+
 ```bash
-cd frontend
+# Install dependencies
 npm install
+
+# Start dev server
 npm run dev
 ```
 
-الواجهة تعمل على: `http://localhost:3000`
+Visit `http://localhost:5173`
 
-## 2) البنية الحالية
+## 📡 API Endpoints
 
-- API أساسي: `backend/src/routes/v1.js`
-- طبقة البيانات + seeding: `backend/src/data/db.js`
-- واجهة legacy داخل React:
-  - `frontend/src/legacy/body.html`
-  - `frontend/src/legacy/legacyScript.js`
-  - `frontend/src/styles/index.css`
+### Public
+- `GET /api/health` - Health check
+- `GET /api/v1/public/tenants` - List schools
+- `POST /api/v1/auth/login` - Login
 
-## 3) ما تم تحسينه
+### Authenticated
+- `GET /api/v1/auth/me` - Current user
+- `POST /api/v1/auth/logout` - Logout
+- `GET /api/v1/lookups` - Dropdown options
+- `GET /api/v1/students` - Student lists
+- `GET /api/v1/submissions` - Grade submissions
+- `POST /api/v1/submissions` - Submit grades
 
-- نظام صلاحيات واضح:
-  - `super_admin`
-  - `school_admin`
-  - `teacher`
-- عزل كامل للبيانات حسب المدرسة (tenant).
-- شاشة Super Admin داخل نفس التطبيق.
-- إعدادات الحساب عبر backend endpoint:
-  - `PATCH /api/v1/auth/account`
-- Seeder شامل (تشغيل تلقائي مرة واحدة حسب `seed_version`) يولّد:
-  - 30 مدرسة
-  - حسابات إدارات ومعلمات
-  - 6600 طالبة تقريبًا
-  - تكليفات تدريس واقعية
-  - سجلات نتائج افتراضية للعرض
+## ✨ Features
 
-## 4) حسابات الدخول الافتراضية
+- ✅ Multi-tenant (multiple schools)
+- ✅ Role-based access (Super Admin, School Admin, Teacher)
+- ✅ Grade submission and tracking
+- ✅ Student management
+- ✅ Teacher assignments
+- ✅ Arabic language support
+- ✅ Responsive design
+- ✅ Serverless architecture
+- ✅ CORS configured
+- ⚠️ SQLite (demo only - migrate for production)
 
-- Super Admin:
-  - Username: `super.admin`
-  - Password: `Admin@123`
-- YUBLA School Admin:
-  - Username: `admin.yubla`
-  - Password: `Admin@123`
-- YUBLA Teacher:
-  - Username: `teacher.yubla`
-  - Password: `Teacher@123`
+## 🔄 Migration Path
 
-ملاحظة: لكل مدرسة حسابات إضافية تلقائية (admin + teachers) بنفس نمط كلمات المرور الافتراضية.
+### Current: SQLite (Demo)
+```
+Good for: Testing, demos, development
+Issue: Data resets on cold starts
+```
 
-## 5) أهم Endpoints
+### Production: Vercel Postgres
+```
+Benefits: Persistent data, backups, scalable
+Cost: Free tier available
+Guide: See migrate-to-postgres.md
+```
 
-- Auth:
-  - `POST /api/v1/auth/login`
-  - `GET /api/v1/auth/me`
-  - `POST /api/v1/auth/logout`
-  - `PATCH /api/v1/auth/account`
-- Public:
-  - `GET /api/v1/public/tenants`
-- Teacher/Admin:
-  - `GET /api/v1/lookups`
-  - `GET /api/v1/students?grade=...&section=...`
-  - `POST /api/v1/submissions`
-  - `GET /api/v1/submissions`
-  - `GET /api/v1/admin/assignments`
-- Super Admin:
-  - `GET /api/v1/super/overview`
-  - `GET /api/v1/super/tenants`
-  - `POST /api/v1/super/tenants`
-  - `POST /api/v1/super/tenants/:tenantId/bootstrap`
-  - `GET /api/v1/super/users`
-  - `POST /api/v1/super/users`
+## 📦 Tech Stack
 
-## 6) ملاحظات
+**Frontend:**
+- React 18
+- Vite 5
+- Vanilla CSS
 
-- قاعدة البيانات داخل:
-  - `backend/data/yubla.sqlite`
-- في حال الرغبة بإعادة توليد كامل البيانات الافتراضية:
-  - احذف الملف `backend/data/yubla.sqlite`
-  - ثم شغّل backend مجددًا.
+**Backend:**
+- Vercel Serverless Functions
+- Node.js
+- sql.js (SQLite)
+
+**Database:**
+- SQLite (current - demo only)
+- Vercel Postgres (recommended for production)
+
+## 🚨 Before Production
+
+- [ ] Read [DATABASE_IMPORTANT.md](./DATABASE_IMPORTANT.md)
+- [ ] Migrate to Vercel Postgres
+- [ ] Update default passwords
+- [ ] Configure custom domain
+- [ ] Set up monitoring
+- [ ] Enable error tracking
+
+## 📄 License
+
+[Your License Here]
+
+## 🤝 Support
+
+For issues or questions:
+- 📖 Check documentation files
+- 🐛 Open an issue on GitHub
+- 📧 Contact support
+
+---
+
+**Ready to deploy?** → [QUICKSTART.md](./QUICKSTART.md)
+
+**Need help?** → [DEPLOYMENT.md](./DEPLOYMENT.md)
+
+**Database questions?** → [DATABASE_IMPORTANT.md](./DATABASE_IMPORTANT.md)

@@ -70,7 +70,19 @@ Visit `http://localhost:5173`
 ✅ Authentication system  
 ✅ Multi-tenant support  
 ✅ CORS configured  
-✅ Ready for production  
+⚠️ **Note:** SQLite resets on cold starts - use Postgres for production
+
+## ⚠️ Important: Database Behavior
+
+**Current Setup (SQLite):**
+- ✅ Works for demos and testing
+- ⚠️ Data resets when function restarts (~5 min idle)
+- ❌ Not suitable for production with real users
+
+**For Production:**
+- 📖 Read [DATABASE_IMPORTANT.md](./DATABASE_IMPORTANT.md)
+- 🔄 Migrate to Vercel Postgres (recommended)
+- 📖 See [migrate-to-postgres.md](./migrate-to-postgres.md)  
 
 ---
 
