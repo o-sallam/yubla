@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
 import initSqlJs from 'sql.js';
-import { hashPassword, verifyPassword } from '../utils/security.js';
+import { hashPassword, verifyPassword } from './security.js';
 
 const require = createRequire(import.meta.url);
 const SQLJS_DIR = path.dirname(require.resolve('sql.js'));
