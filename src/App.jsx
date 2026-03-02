@@ -4,7 +4,11 @@ import legacyScript from './legacy/legacyScript.js?raw';
 
 function App() {
   useEffect(() => {
-    const apiBase = (import.meta.env.VITE_API_BASE || 'http://localhost:3000').replace(/\/+$/, '');
+    // In production (Vercel), use relative path. In dev, use localhost or env var
+    const apiBase = import.meta.env.VITE_API_BASE 
+      ? import.meta.env.VITE_API_BASE.replace(/\/+$/, '')
+      : (import.meta.env.PROD ? '' : 'http://localhost:3000');
+    
     window.__APP_API_BASE__ = apiBase;
     const runLegacy = new Function('API_BASE', legacyScript);
     runLegacy(apiBase);
