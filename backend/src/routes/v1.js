@@ -63,14 +63,14 @@ const getBearerToken = (req) => {
   return header.slice(7).trim();
 };
 
-const authRequired = (req, res, next) => {
-  deleteExpiredSessionsDb();
+const authRequired = async (req, res, next) => {
+  await deleteExpiredSessionsDb();
   const token = getBearerToken(req);
   if (!token) {
     return res.status(401).json({ ok: false, error: 'Unauthorized' });
   }
 
-  const sessionRow = findSessionDb(token);
+  const sessionRow = await findSessionDb(token);
   const session = sessionRow
     ? {
       id: sessionRow.id,
@@ -82,7 +82,7 @@ const authRequired = (req, res, next) => {
     : null;
 
   if (!session || isSessionExpired(session)) {
-    if (session) deleteSessionDb(token);
+    if (session) await deleteSessionDb(token);
     return res.status(401).json({ ok: false, error: 'Session expired' });
   }
 
@@ -122,18 +122,18 @@ const normalizeStudentImportRow = (row) => ({
   studentNo: cleanText(row?.studentNo || row?.idNo || row?.['رقم الطالبة'])
 });
 
-router.get('/health', (_req, res) => {
+router.get('/health', async (_req, res) => {
   res.json({ ok: true, version: 'v1' });
 });
 
-router.get('/public/tenants', (_req, res) => {
-  const tenants = listTenantsDb()
+router.get('/public/tenants', async (_req, res) => {
+  const tenants = await listTenantsDb()
     .filter((tenant) => tenant.active)
     .map((tenant) => ({ id: tenant.id, code: tenant.code, name: tenant.name, city: tenant.city }));
   res.json({ ok: true, tenants });
 });
 
-router.post('/auth/login', (req, res) => {
+router.post('/auth/login', async (req, res) => {
   const username = cleanText(req.body?.username).toLowerCase();
   const password = cleanText(req.body?.password);
   const tenantCode = cleanText(req.body?.tenantCode);
@@ -142,7 +142,7 @@ router.post('/auth/login', (req, res) => {
     return res.status(400).json({ ok: false, error: 'username and password are required' });
   }
 
-  const user = findUserByUsernameDb(username);
+  const user = await findUserByUsernameDb(username);
   if (!user || !user.active) {
     return res.status(401).json({ ok: false, error: 'Invalid credentials' });
   }
@@ -151,14 +151,14 @@ router.post('/auth/login', (req, res) => {
   }
 
   if (user.role !== 'super_admin' && tenantCode) {
-    const tenant = findTenantByCodeDb(tenantCode);
+    const tenant = await findTenantByCodeDb(tenantCode);
     if (!tenant || !tenant.active || tenant.id !== user.tenantId) {
       return res.status(403).json({ ok: false, error: 'Tenant access denied' });
     }
   }
 
-  const session = saveSessionDb(createSession(user));
-  const tenant = user.tenantId ? findTenantByIdDb(user.tenantId) : null;
+  const session = await saveSessionDb(createSession(user));
+  const tenant = user.tenantId ? await findTenantByIdDb(user.tenantId) : null;
   return res.json({
     ok: true,
     accessToken: session.id,
@@ -168,14 +168,14 @@ router.post('/auth/login', (req, res) => {
   });
 });
 
-router.post('/auth/logout', authRequired, (req, res) => {
-  deleteSessionDb(req.auth.id);
+router.post('/auth/logout', authRequired, async (req, res) => {
+  await deleteSessionDb(req.auth.id);
   res.json({ ok: true });
 });
 
-router.get('/auth/me', authRequired, (req, res) => {
-  const user = findUserByIdDb(req.auth.userId);
-  const tenant = req.auth.tenantId ? findTenantByIdDb(req.auth.tenantId) : null;
+router.get('/auth/me', authRequired, async (req, res) => {
+  const user = await findUserByIdDb(req.auth.userId);
+  const tenant = req.auth.tenantId ? await findTenantByIdDb(req.auth.tenantId) : null;
   res.json({
     ok: true,
     session: {
@@ -189,7 +189,7 @@ router.get('/auth/me', authRequired, (req, res) => {
   });
 });
 
-router.patch('/auth/account', authRequired, (req, res) => {
+router.patch('/auth/account', authRequired, async (req, res) => {
   const currentPassword = cleanText(req.body?.currentPassword);
   const newUsername = cleanText(req.body?.newUsername).toLowerCase();
   const newPassword = cleanText(req.body?.newPassword);
@@ -199,7 +199,7 @@ router.patch('/auth/account', authRequired, (req, res) => {
     return res.status(400).json({ ok: false, error: 'currentPassword is required' });
   }
 
-  const user = findUserByIdDb(req.auth.userId);
+  const user = await findUserByIdDb(req.auth.userId);
   if (!user || !user.active) {
     return res.status(404).json({ ok: false, error: 'User not found' });
   }
@@ -219,7 +219,7 @@ router.patch('/auth/account', authRequired, (req, res) => {
     return res.status(400).json({ ok: false, error: 'No updates provided' });
   }
 
-  const updated = updateUserDb(user.id, payload);
+  const updated = await updateUserDb(user.id, payload);
   if (!updated) {
     return res.status(409).json({ ok: false, error: 'Unable to update account (username may already exist)' });
   }
@@ -227,16 +227,16 @@ router.patch('/auth/account', authRequired, (req, res) => {
   return res.json({ ok: true, user: sanitizeUser(updated) });
 });
 
-router.get('/super/overview', authRequired, rolesAllowed('super_admin'), (_req, res) => {
+router.get('/super/overview', authRequired, rolesAllowed('super_admin'), async (_req, res) => {
   res.json({ ok: true, stats: getSystemStatsDb() });
 });
 
-router.get('/super/tenants', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.get('/super/tenants', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const search = cleanText(req.query.search).toLowerCase();
   const page = Math.max(1, toNumber(req.query.page, 1));
   const pageSize = Math.min(200, Math.max(1, toNumber(req.query.pageSize, 20)));
 
-  const rows = listTenantsDb().filter((tenant) => {
+  const rows = await listTenantsDb().filter((tenant) => {
     if (!search) return true;
     return (
       tenant.name.toLowerCase().includes(search) ||
@@ -252,7 +252,7 @@ router.get('/super/tenants', authRequired, rolesAllowed('super_admin'), (req, re
   res.json({ ok: true, items, total, page, pageSize });
 });
 
-router.post('/super/tenants', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.post('/super/tenants', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const code = cleanText(req.body?.code);
   const name = cleanText(req.body?.name);
   const city = cleanText(req.body?.city);
@@ -262,19 +262,19 @@ router.post('/super/tenants', authRequired, rolesAllowed('super_admin'), (req, r
     return res.status(400).json({ ok: false, error: 'code and name are required' });
   }
 
-  const tenant = createTenantDb({ code, name, city, active: true });
+  const tenant = await createTenantDb({ code, name, city, active: true });
   if (!tenant) {
     return res.status(409).json({ ok: false, error: 'Tenant already exists or invalid data' });
   }
 
   if (autoBootstrap) {
-    bootstrapTenantDemoDb({ tenantId: tenant.id, tenantCode: tenant.code, tenantName: tenant.name });
+    await bootstrapTenantDemoDb({ tenantId: tenant.id, tenantCode: tenant.code, tenantName: tenant.name });
   }
 
   return res.status(201).json({ ok: true, tenant });
 });
 
-router.patch('/super/tenants/:tenantId', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.patch('/super/tenants/:tenantId', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const tenantId = cleanText(req.params.tenantId);
   const payload = {};
   if (req.body?.code !== undefined) payload.code = cleanText(req.body.code);
@@ -282,32 +282,32 @@ router.patch('/super/tenants/:tenantId', authRequired, rolesAllowed('super_admin
   if (req.body?.city !== undefined) payload.city = cleanText(req.body.city);
   if (req.body?.active !== undefined) payload.active = Boolean(req.body.active);
 
-  const updated = updateTenantDb(tenantId, payload);
+  const updated = await updateTenantDb(tenantId, payload);
   if (!updated) {
     return res.status(400).json({ ok: false, error: 'Unable to update tenant' });
   }
   return res.json({ ok: true, tenant: updated });
 });
 
-router.post('/super/tenants/:tenantId/bootstrap', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.post('/super/tenants/:tenantId/bootstrap', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const tenantId = cleanText(req.params.tenantId);
-  const tenant = findTenantByIdDb(tenantId);
+  const tenant = await findTenantByIdDb(tenantId);
   if (!tenant) {
     return res.status(404).json({ ok: false, error: 'Tenant not found' });
   }
-  bootstrapTenantDemoDb({ tenantId, tenantCode: tenant.code, tenantName: tenant.name });
+  await bootstrapTenantDemoDb({ tenantId, tenantCode: tenant.code, tenantName: tenant.name });
   return res.json({ ok: true });
 });
 
-router.get('/super/users', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.get('/super/users', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const tenantId = cleanText(req.query.tenantId) || null;
   const role = cleanText(req.query.role) || null;
   const search = cleanText(req.query.search) || '';
-  const users = listUsersDb({ tenantId, role, search }).map((user) => sanitizeUser(user, { includePassword: true }));
+  const users = await listUsersDb({ tenantId, role, search }).map((user) => sanitizeUser(user, { includePassword: true }));
   res.json({ ok: true, users });
 });
 
-router.post('/super/users', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.post('/super/users', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const username = cleanText(req.body?.username).toLowerCase();
   const displayName = cleanText(req.body?.displayName);
   const password = cleanText(req.body?.password);
@@ -326,7 +326,7 @@ router.post('/super/users', authRequired, rolesAllowed('super_admin'), (req, res
     return res.status(400).json({ ok: false, error: 'tenantId is not allowed for platform admin accounts' });
   }
 
-  const user = createUserDb({
+  const user = await createUserDb({
     username,
     displayName: displayName || username,
     passwordPlain: password,
@@ -341,7 +341,7 @@ router.post('/super/users', authRequired, rolesAllowed('super_admin'), (req, res
   return res.status(201).json({ ok: true, user: sanitizeUser(user, { includePassword: true }) });
 });
 
-router.patch('/super/users/:userId', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.patch('/super/users/:userId', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const userId = cleanText(req.params.userId);
   const payload = {};
   if (req.body?.username !== undefined) payload.username = cleanText(req.body.username).toLowerCase();
@@ -354,52 +354,52 @@ router.patch('/super/users/:userId', authRequired, rolesAllowed('super_admin'), 
   if (req.body?.tenantId !== undefined) payload.tenantId = cleanText(req.body.tenantId) || null;
   if (req.body?.active !== undefined) payload.active = Boolean(req.body.active);
 
-  const updated = updateUserDb(userId, payload);
+  const updated = await updateUserDb(userId, payload);
   if (!updated) {
     return res.status(400).json({ ok: false, error: 'Unable to update user' });
   }
   return res.json({ ok: true, user: sanitizeUser(updated, { includePassword: true }) });
 });
 
-router.get('/super/teachers', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.get('/super/teachers', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const tenantId = cleanText(req.query.tenantId) || null;
   const search = cleanText(req.query.search) || '';
-  const teachers = listTeachersForSuperDb({ tenantId, search });
+  const teachers = await listTeachersForSuperDb({ tenantId, search });
   return res.json({ ok: true, teachers });
 });
 
-router.delete('/super/teachers/:userId', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.delete('/super/teachers/:userId', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const userId = cleanText(req.params.userId);
   if (!userId) return res.status(400).json({ ok: false, error: 'userId is required' });
-  const ok = deactivateTeacherDb(userId);
+  const ok = await deactivateTeacherDb(userId);
   if (!ok) return res.status(404).json({ ok: false, error: 'Teacher not found' });
   return res.json({ ok: true });
 });
 
-router.get('/super/students', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.get('/super/students', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const tenantId = cleanText(req.query.tenantId) || null;
   const search = cleanText(req.query.search) || '';
-  const students = listStudentsForSuperDb({ tenantId, search });
+  const students = await listStudentsForSuperDb({ tenantId, search });
   return res.json({ ok: true, students });
 });
 
-router.delete('/super/students/:studentId', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.delete('/super/students/:studentId', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const studentId = toNumber(req.params.studentId, 0);
   if (!studentId) return res.status(400).json({ ok: false, error: 'studentId is required' });
-  const ok = deactivateStudentDb(studentId);
+  const ok = await deactivateStudentDb(studentId);
   if (!ok) return res.status(404).json({ ok: false, error: 'Student not found' });
   return res.json({ ok: true });
 });
 
-router.post('/super/system/reset-schools', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.post('/super/system/reset-schools', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   if (req.body?.confirm !== true) {
     return res.status(400).json({ ok: false, error: 'Confirmation is required' });
   }
-  const report = purgeSchoolDataDb({ keepSessionId: req.auth.id });
+  const report = await purgeSchoolDataDb({ keepSessionId: req.auth.id });
   return res.json({ ok: true, report });
 });
 
-router.post('/super/import/teachers', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.post('/super/import/teachers', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
   const tenantId = cleanText(req.body?.tenantId) || null;
   const defaultPassword = cleanText(req.body?.defaultPassword) || 'Teacher@123';
@@ -409,11 +409,11 @@ router.post('/super/import/teachers', authRequired, rolesAllowed('super_admin'),
   }
 
   const normalizedRows = rows.map(normalizeTeacherImportRow);
-  const report = importTeachersRowsDb(normalizedRows, { defaultTenantId: tenantId, defaultPassword });
+  const report = await importTeachersRowsDb(normalizedRows, { defaultTenantId: tenantId, defaultPassword });
   return res.json({ ok: true, report });
 });
 
-router.post('/super/import/students', authRequired, rolesAllowed('super_admin'), (req, res) => {
+router.post('/super/import/students', authRequired, rolesAllowed('super_admin'), async (req, res) => {
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
   const tenantId = cleanText(req.body?.tenantId) || null;
 
@@ -422,16 +422,16 @@ router.post('/super/import/students', authRequired, rolesAllowed('super_admin'),
   }
 
   const normalizedRows = rows.map(normalizeStudentImportRow);
-  const report = importStudentsRowsDb(normalizedRows, { defaultTenantId: tenantId });
+  const report = await importStudentsRowsDb(normalizedRows, { defaultTenantId: tenantId });
   return res.json({ ok: true, report });
 });
 
-router.get('/admin/users', authRequired, rolesAllowed('school_admin'), (req, res) => {
-  const users = listUsersDb({ tenantId: req.auth.tenantId }).map(sanitizeUser);
+router.get('/admin/users', authRequired, rolesAllowed('school_admin'), async (req, res) => {
+  const users = await listUsersDb({ tenantId: req.auth.tenantId }).map(sanitizeUser);
   res.json({ ok: true, users });
 });
 
-router.post('/admin/users', authRequired, rolesAllowed('school_admin'), (req, res) => {
+router.post('/admin/users', authRequired, rolesAllowed('school_admin'), async (req, res) => {
   const username = cleanText(req.body?.username).toLowerCase();
   const displayName = cleanText(req.body?.displayName);
   const password = cleanText(req.body?.password);
@@ -440,7 +440,7 @@ router.post('/admin/users', authRequired, rolesAllowed('school_admin'), (req, re
     return res.status(400).json({ ok: false, error: 'username and password are required' });
   }
 
-  const user = createUserDb({
+  const user = await createUserDb({
     username,
     displayName: displayName || username,
     passwordPlain: password,
@@ -455,34 +455,34 @@ router.post('/admin/users', authRequired, rolesAllowed('school_admin'), (req, re
   return res.status(201).json({ ok: true, user: sanitizeUser(user) });
 });
 
-router.get('/admin/assignments', authRequired, rolesAllowed('school_admin'), (req, res) => {
-  const assignments = getTenantAssignmentsDb(req.auth.tenantId);
+router.get('/admin/assignments', authRequired, rolesAllowed('school_admin'), async (req, res) => {
+  const assignments = await getTenantAssignmentsDb(req.auth.tenantId);
   return res.json({ ok: true, assignments });
 });
 
-router.post('/admin/assignments/replace', authRequired, rolesAllowed('school_admin'), (req, res) => {
+router.post('/admin/assignments/replace', authRequired, rolesAllowed('school_admin'), async (req, res) => {
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-  const replaced = replaceTenantAssignmentsDb(req.auth.tenantId, rows);
+  const replaced = await replaceTenantAssignmentsDb(req.auth.tenantId, rows);
   return res.json({ ok: true, replaced });
 });
 
-router.post('/admin/students/replace', authRequired, rolesAllowed('school_admin'), (req, res) => {
+router.post('/admin/students/replace', authRequired, rolesAllowed('school_admin'), async (req, res) => {
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-  const replaced = replaceTenantStudentsDb(req.auth.tenantId, rows);
+  const replaced = await replaceTenantStudentsDb(req.auth.tenantId, rows);
   return res.json({ ok: true, replaced });
 });
 
-router.get('/lookups', authRequired, rolesAllowed('school_admin', 'teacher'), (req, res) => {
-  const user = findUserByIdDb(req.auth.userId);
+router.get('/lookups', authRequired, rolesAllowed('school_admin', 'teacher'), async (req, res) => {
+  const user = await findUserByIdDb(req.auth.userId);
   const lookups =
     req.auth.role === 'teacher'
-      ? buildTeacherScopedLookupsDb(req.auth.tenantId, user)
-      : getTenantLookupsDb(req.auth.tenantId);
+      ? await buildTeacherScopedLookupsDb(req.auth.tenantId, user)
+      : await getTenantLookupsDb(req.auth.tenantId);
   if (!lookups) return res.status(404).json({ ok: false, error: 'Tenant not found' });
   return res.json({ ok: true, ...lookups });
 });
 
-router.get('/students', authRequired, rolesAllowed('school_admin', 'teacher'), (req, res) => {
+router.get('/students', authRequired, rolesAllowed('school_admin', 'teacher'), async (req, res) => {
   const grade = cleanText(req.query.grade);
   const section = cleanText(req.query.section);
   if (!grade || !section) {
@@ -491,11 +491,11 @@ router.get('/students', authRequired, rolesAllowed('school_admin', 'teacher'), (
   if (req.auth.role === 'teacher' && !canTeacherAccessDb(req.auth.tenantId, req.auth.userId, grade, section)) {
     return res.status(403).json({ ok: false, error: 'Access denied for selected class/section' });
   }
-  const students = getTenantStudentsDb(req.auth.tenantId, grade, section);
+  const students = await getTenantStudentsDb(req.auth.tenantId, grade, section);
   return res.json({ ok: true, students });
 });
 
-router.post('/submissions', authRequired, rolesAllowed('school_admin', 'teacher'), (req, res) => {
+router.post('/submissions', authRequired, rolesAllowed('school_admin', 'teacher'), async (req, res) => {
   const payload = req.body || {};
   const header = payload.header || {};
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
@@ -518,11 +518,11 @@ router.post('/submissions', authRequired, rolesAllowed('school_admin', 'teacher'
   if (req.auth.role === 'school_admin' && !teacherNameInput) {
     return res.status(400).json({ ok: false, error: 'teacherName is required for school_admin submissions' });
   }
-  if (req.auth.role === 'teacher' && !canTeacherAccessDb(req.auth.tenantId, req.auth.userId, grade, section, subject)) {
+  if (req.auth.role === 'teacher' && !(await canTeacherAccessDb(req.auth.tenantId, req.auth.userId, grade, section, subject))) {
     return res.status(403).json({ ok: false, error: 'Access denied for selected grade/section/subject' });
   }
 
-  const authUser = findUserByIdDb(req.auth.userId);
+  const authUser = await findUserByIdDb(req.auth.userId);
   const teacherName = req.auth.role === 'teacher' ? authUser?.displayName || authUser?.username || '' : teacherNameInput;
 
   const batchId = `${Date.now()}`;
@@ -563,13 +563,13 @@ router.post('/submissions', authRequired, rolesAllowed('school_admin', 'teacher'
       plan: cleanText(row.plan),
       level
     };
-    if (addTenantSubmissionDb(req.auth.tenantId, outRow)) inserted += 1;
+    if (await addTenantSubmissionDb(req.auth.tenantId, outRow)) inserted += 1;
   }
 
   return res.json({ ok: true, batchId, inserted });
 });
 
-router.get('/submissions', authRequired, rolesAllowed('school_admin', 'teacher', 'super_admin'), (req, res) => {
+router.get('/submissions', authRequired, rolesAllowed('school_admin', 'teacher', 'super_admin'), async (req, res) => {
   let tenantId = req.auth.tenantId;
   if (req.auth.role === 'super_admin') {
     tenantId = cleanText(req.query.tenantId);
@@ -577,7 +577,7 @@ router.get('/submissions', authRequired, rolesAllowed('school_admin', 'teacher',
       return res.status(400).json({ ok: false, error: 'tenantId is required for super_admin' });
     }
   }
-  const rows = getTenantSubmissionsDb(tenantId);
+  const rows = await getTenantSubmissionsDb(tenantId);
   return res.json({ ok: true, rows });
 });
 

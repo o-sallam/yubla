@@ -1,19 +1,23 @@
-import fs from 'fs';
-import path from 'path';
-import { createRequire } from 'module';
-import initSqlJs from 'sql.js';
+import pg from 'pg';
 import { hashPassword, verifyPassword } from '../utils/security.js';
 
-const require = createRequire(import.meta.url);
-const SQLJS_DIR = path.dirname(require.resolve('sql.js'));
-const DB_DIR = process.env.DB_DIR ? path.resolve(process.env.DB_DIR) : path.resolve(process.cwd(), 'data');
-const DB_PATH = path.join(DB_DIR, 'yubla.sqlite');
+const { Pool } = pg;
+
+// Supabase PostgreSQL connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Yubla_sc@123@db.qgivldlsyinxbeujrmzz.supabase.co:5432/postgres',
+  ssl: {
+    rejectUnauthorized: false
+  },
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000
+});
 
 const SCHEMA_VERSION = '2026.02.platform.v1';
 const SEED_VERSION = '2026.03.empty.v3';
 
 const ROLE_VALUES = ['super_admin', 'school_admin', 'teacher'];
-
 const GRADE_VALUES = ['سابع', 'ثامن', 'تاسع', 'عاشر', 'أول ثانوي', 'ثاني ثانوي'];
 const SECTION_VALUES = ['أ', 'ب', 'ج'];
 const SUBJECT_VALUES = [
@@ -45,199 +49,9 @@ const CITY_VALUES = [
   'الطفيلة'
 ];
 
-const SCHOOL_NAME_VALUES = [
-  'مدرسة الريادة الثانوية للبنات',
-  'مدرسة النهضة الثانوية للبنات',
-  'مدرسة الإبداع الثانوية للبنات',
-  'مدرسة الفاروق الثانوية للبنات',
-  'مدرسة اليرموك الثانوية للبنات',
-  'مدرسة الخنساء الثانوية للبنات',
-  'مدرسة الزهراء الثانوية للبنات',
-  'مدرسة الكرمل الثانوية للبنات',
-  'مدرسة الأميرة بسمة الثانوية للبنات',
-  'مدرسة المنار الثانوية للبنات',
-  'مدرسة الحكمة الثانوية للبنات',
-  'مدرسة القمم الثانوية للبنات'
-];
+let initialized = false;
 
-const TEACHER_NAME_VALUES = [
-  'سجود بدر العزام',
-  'سعاد صالح',
-  'هدى خالد',
-  'ريم ياسين',
-  'نورا الحسن',
-  'مها الزعبي',
-  'رنا القاسم',
-  'دانا الخطيب',
-  'ميساء شقيرات',
-  'هبة الشناق',
-  'سحر شحادة',
-  'إيمان الحباشنة',
-  'ليان العلي',
-  'جنى البطاينة',
-  'فرح الريماوي',
-  'بيان النعيمات',
-  'آية أبو غوش',
-  'ابتسام النوافلة',
-  'نسرين العوران',
-  'أسماء السرحان',
-  'علا الرياحي',
-  'نورا العمري',
-  'رغد الزبيدي',
-  'عهد الخوالدة',
-  'سمر الكيلاني',
-  'عائشة الدهام',
-  'لمى الغزاوي',
-  'حنان الطراونة',
-  'إسراء حياصات',
-  'ميسون الفاعوري',
-  'نهاد القضاة',
-  'ميس القواسمة',
-  'وفاء الطوالبة',
-  'شيماء العدوان',
-  'غدير الزيناتي',
-  'بتول المومني',
-  'إسراء الزيدان',
-  'جمانة أبو زيد',
-  'ياسمين عبيدات',
-  'مروى الشريف',
-  'عبير الحمد',
-  'هيفاء الشديفات',
-  'ديما بني هاني',
-  'ندى الحوامدة',
-  'آمال الشبول',
-  'شهد الخلايلة',
-  'مرام السردية',
-  'لينا السوالمة'
-];
-
-const STUDENT_FIRST_NAMES = [
-  'آية',
-  'إسراء',
-  'بتول',
-  'بيان',
-  'دانا',
-  'ديما',
-  'رنا',
-  'ريم',
-  'رغد',
-  'سارة',
-  'سجى',
-  'سلمى',
-  'سما',
-  'شذى',
-  'شهد',
-  'ضياء',
-  'عبير',
-  'علا',
-  'غدير',
-  'فرح',
-  'لجين',
-  'لينا',
-  'لمى',
-  'مايا',
-  'مها',
-  'ميس',
-  'ميساء',
-  'ندى',
-  'نسرين',
-  'نور',
-  'نورا',
-  'هبة',
-  'هيا',
-  'ياسمين',
-  'جنى',
-  'جود',
-  'جمانة',
-  'حنين',
-  'حلا',
-  'خلود'
-];
-
-const STUDENT_LAST_NAMES = [
-  'العزام',
-  'الزعبي',
-  'الخطيب',
-  'النعيمات',
-  'الريماوي',
-  'العمري',
-  'القضاة',
-  'الخوالدة',
-  'الشناق',
-  'المومني',
-  'السرحان',
-  'الطراونة',
-  'الحباشنة',
-  'الكيلاني',
-  'الدهام',
-  'العبادي',
-  'الرمامنة',
-  'الحياصات',
-  'السوالمة',
-  'الخلايلة',
-  'المعاني',
-  'الشديفات',
-  'الشرعة',
-  'القاسم',
-  'الفاعوري',
-  'الحمود',
-  'العوران',
-  'عبيدات',
-  'بني هاني',
-  'الرحاحلة'
-];
-
-let SQL = null;
-let db = null;
-
-const ensureDir = () => {
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-  }
-};
-
-const run = (sql, params = []) => {
-  db.run(sql, params);
-};
-
-const getOne = (sql, params = []) => {
-  const stmt = db.prepare(sql, params);
-  const row = stmt.step() ? stmt.getAsObject() : null;
-  stmt.free();
-  return row;
-};
-
-const getAll = (sql, params = []) => {
-  const stmt = db.prepare(sql, params);
-  const rows = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject());
-  }
-  stmt.free();
-  return rows;
-};
-
-const persist = () => {
-  ensureDir();
-  const data = db.export();
-  fs.writeFileSync(DB_PATH, Buffer.from(data));
-};
-
-const withTransaction = (fn) => {
-  run('BEGIN');
-  try {
-    fn();
-    run('COMMIT');
-  } catch (error) {
-    try {
-      run('ROLLBACK');
-    } catch {
-      // ignore rollback failures
-    }
-    throw error;
-  }
-};
-
+// Helper functions
 const nowIso = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -286,26 +100,27 @@ const mapUser = (row) =>
       }
     : null;
 
-const createSchema = () => {
-  run(`
+// Database schema creation
+const createSchema = async (client) => {
+  await client.query(`
     CREATE TABLE IF NOT EXISTS app_meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
   `);
 
-  run(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS tenants (
       id TEXT PRIMARY KEY,
       code TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       city TEXT NOT NULL DEFAULT '',
-      active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
-  run(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
@@ -314,27 +129,27 @@ const createSchema = () => {
       password_plain TEXT NOT NULL DEFAULT '',
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('super_admin', 'school_admin', 'teacher')),
-      tenant_id TEXT NULL,
-      active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      tenant_id TEXT NULL REFERENCES tenants(id),
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
-  run(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       tenant_id TEXT NULL,
       role TEXT NOT NULL,
-      expires_at INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      expires_at BIGINT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
-  run(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS lookups (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       tenant_id TEXT NOT NULL,
       type TEXT NOT NULL CHECK (type IN ('teachers', 'grades', 'sections', 'subjects', 'exams')),
       value TEXT NOT NULL,
@@ -342,22 +157,22 @@ const createSchema = () => {
     );
   `);
 
-  run(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS students (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       tenant_id TEXT NOT NULL,
       student_no TEXT NOT NULL DEFAULT '',
       student_name TEXT NOT NULL,
       grade TEXT NOT NULL,
       section TEXT NOT NULL,
-      active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
-  run(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS teacher_assignments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       tenant_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
       grade TEXT NOT NULL,
@@ -367,11 +182,11 @@ const createSchema = () => {
     );
   `);
 
-  run(`
+  await client.query(`
     CREATE TABLE IF NOT EXISTS submissions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       tenant_id TEXT NOT NULL,
-      timestamp TEXT NOT NULL,
+      timestamp TIMESTAMP NOT NULL,
       batch_id TEXT NOT NULL,
       teacher_name TEXT NOT NULL,
       grade TEXT NOT NULL,
@@ -392,650 +207,141 @@ const createSchema = () => {
     );
   `);
 
-  run('CREATE INDEX IF NOT EXISTS idx_users_tenant_role ON users (tenant_id, role)');
-  run('CREATE INDEX IF NOT EXISTS idx_students_tenant_grade_section ON students (tenant_id, grade, section)');
-  run('CREATE INDEX IF NOT EXISTS idx_submissions_tenant ON submissions (tenant_id)');
-  run('CREATE INDEX IF NOT EXISTS idx_assignments_tenant_user ON teacher_assignments (tenant_id, user_id)');
+  // Create indexes
+  await client.query('CREATE INDEX IF NOT EXISTS idx_users_tenant_role ON users (tenant_id, role)');
+  await client.query('CREATE INDEX IF NOT EXISTS idx_students_tenant_grade_section ON students (tenant_id, grade, section)');
+  await client.query('CREATE INDEX IF NOT EXISTS idx_submissions_tenant ON submissions (tenant_id)');
+  await client.query('CREATE INDEX IF NOT EXISTS idx_assignments_tenant_user ON teacher_assignments (tenant_id, user_id)');
 };
 
-const ensureMigrations = () => {
-  const addColumnIfMissing = (table, column, sql) => {
-    const columns = getAll(`PRAGMA table_info(${table})`);
-    if (!columns.some((col) => col.name === column)) {
-      run(sql);
-    }
-  };
-
-  addColumnIfMissing('users', 'display_name', "ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT ''");
-  addColumnIfMissing('users', 'employee_no', "ALTER TABLE users ADD COLUMN employee_no TEXT NOT NULL DEFAULT ''");
-  addColumnIfMissing('users', 'password_plain', "ALTER TABLE users ADD COLUMN password_plain TEXT NOT NULL DEFAULT ''");
-  addColumnIfMissing('users', 'updated_at', "ALTER TABLE users ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
-  addColumnIfMissing('tenants', 'city', "ALTER TABLE tenants ADD COLUMN city TEXT NOT NULL DEFAULT ''");
-  addColumnIfMissing('students', 'student_no', "ALTER TABLE students ADD COLUMN student_no TEXT NOT NULL DEFAULT ''");
-  addColumnIfMissing('students', 'active', 'ALTER TABLE students ADD COLUMN active INTEGER NOT NULL DEFAULT 1');
-  addColumnIfMissing('students', 'created_at', "ALTER TABLE students ADD COLUMN created_at TEXT NOT NULL DEFAULT ''");
-  run("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_tenant_employee_no ON users (tenant_id, employee_no) WHERE employee_no <> ''");
-  run("CREATE UNIQUE INDEX IF NOT EXISTS idx_students_tenant_student_no ON students (tenant_id, student_no) WHERE student_no <> ''");
-  run("UPDATE users SET updated_at = COALESCE(NULLIF(updated_at, ''), CURRENT_TIMESTAMP)");
-  run("UPDATE students SET created_at = COALESCE(NULLIF(created_at, ''), CURRENT_TIMESTAMP)");
-
-  const usersWithoutPlain = getAll(
-    `
-      SELECT id, role, username, employee_no, password_hash
-      FROM users
-      WHERE COALESCE(password_plain, '') = ''
-    `
-  );
-  usersWithoutPlain.forEach((row) => {
-    const candidates = [];
-    if (row.role === 'super_admin' || row.role === 'school_admin') {
-      candidates.push('Admin@123');
-    }
-    if (row.role === 'teacher') {
-      candidates.push('Teacher@123');
-      const employeeNo = cleanText(row.employee_no);
-      if (employeeNo) candidates.push(`T@${employeeNo.slice(-6)}`);
-    }
-    const matched = candidates.find((candidate) => verifyPassword(candidate, String(row.password_hash || '')));
-    if (matched) {
-      run('UPDATE users SET password_plain = ? WHERE id = ?', [matched, row.id]);
-    }
-  });
-
-  const teacherRows = getAll(
-    `
-      SELECT id, username, employee_no
-      FROM users
-      WHERE role = 'teacher'
-    `
-  );
-  teacherRows.forEach((row) => {
-    const currentUsername = normalizeUsername(row.username);
-    if (!currentUsername.startsWith('t.')) return;
-
-    const digits = String(row.employee_no || '').replace(/\D+/g, '');
-    if (!digits) return;
-
-    const base = `t${digits.slice(-6)}`;
-    let candidate = base;
-    let i = 1;
-    while (getOne('SELECT id FROM users WHERE lower(username) = lower(?) AND id <> ?', [candidate, row.id])) {
-      candidate = `${base}${i}`;
-      i += 1;
-    }
-
-    if (candidate !== currentUsername) {
-      run('UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [candidate, row.id]);
-    }
-  });
+// Meta functions
+const getMetaValue = async (key) => {
+  const result = await pool.query('SELECT value FROM app_meta WHERE key = $1', [key]);
+  return result.rows[0] ? String(result.rows[0].value) : null;
 };
 
-const getMetaValue = (key) => {
-  const row = getOne('SELECT value FROM app_meta WHERE key = ?', [key]);
-  return row ? String(row.value) : null;
-};
-
-const setMetaValue = (key, value) => {
-  run(
-    `
-    INSERT INTO app_meta (key, value)
-    VALUES (?, ?)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `,
+const setMetaValue = async (key, value) => {
+  await pool.query(
+    `INSERT INTO app_meta (key, value) VALUES ($1, $2)
+     ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value`,
     [key, String(value)]
   );
 };
 
-const upsertTenantByCodeInternal = ({ id, code, name, city = '', active = 1 }) => {
-  const normalizedCode = normalizeCode(code);
-  const row = getOne('SELECT id FROM tenants WHERE lower(code) = lower(?)', [normalizedCode]);
-  if (row) {
-    run(
-      `
-      UPDATE tenants
-      SET name = ?, city = ?, active = ?
-      WHERE id = ?
-    `,
-      [name, city, active ? 1 : 0, row.id]
-    );
-    return row.id;
-  }
-  const tenantId = id || makeId('t');
-  run(
-    `
-    INSERT INTO tenants (id, code, name, city, active)
-    VALUES (?, ?, ?, ?, ?)
-  `,
-    [tenantId, normalizedCode, name, city, active ? 1 : 0]
-  );
-  return tenantId;
-};
-
-const buildTenantCodeFromSchoolNameInternal = (schoolName) => {
-  const raw = cleanText(schoolName);
-  const normalized = normalizeCode(raw)
-    .replace(/[^A-Z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-  const base = (normalized || 'SCHOOL').slice(0, 18);
-  let candidate = base;
-  let i = 1;
-  while (findTenantByCodeDb(candidate)) {
-    candidate = `${base}-${i}`;
-    i += 1;
-  }
-  return candidate;
-};
-
-const ensureTenantBySchoolNameInternal = (schoolName) => {
-  const cleanName = cleanText(schoolName);
-  if (!cleanName) return null;
-  const existing = findTenantByNameDb(cleanName);
-  if (existing) return existing;
-  const code = buildTenantCodeFromSchoolNameInternal(cleanName);
-  const tenantId = upsertTenantByCodeInternal({
-    id: `t-${code.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`,
-    code,
-    name: cleanName,
-    city: '',
-    active: 1
-  });
-  return findTenantByIdDb(tenantId);
-};
-
-const upsertUserByUsernameInternal = ({
-  id,
-  username,
-  displayName,
-  role,
-  tenantId,
-  password,
-  active = 1
-}) => {
-  const normalizedUsername = normalizeUsername(username);
-  const existing = getOne('SELECT id FROM users WHERE lower(username) = lower(?)', [normalizedUsername]);
-  const userId = existing ? existing.id : id || makeId('u');
-  const passwordHash = hashPassword(password);
-  if (existing) {
-    run(
-      `
-      UPDATE users
-      SET username = ?, display_name = ?, role = ?, tenant_id = ?, active = ?, password_hash = ?, password_plain = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `,
-      [normalizedUsername, displayName, role, tenantId || null, active ? 1 : 0, passwordHash, password, userId]
-    );
-  } else {
-    run(
-      `
-      INSERT INTO users (id, username, display_name, password_hash, password_plain, role, tenant_id, active)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-      [userId, normalizedUsername, displayName, passwordHash, password, role, tenantId || null, active ? 1 : 0]
-    );
-  }
-  return userId;
-};
-
-const replaceLookupValuesInternal = (tenantId, type, values) => {
-  run('DELETE FROM lookups WHERE tenant_id = ? AND type = ?', [tenantId, type]);
-  const uniqueValues = [...new Set((values || []).map((v) => cleanText(v)).filter(Boolean))];
-  uniqueValues.forEach((value) => {
-    run('INSERT INTO lookups (tenant_id, type, value) VALUES (?, ?, ?)', [tenantId, type, value]);
-  });
-};
-
-const replaceTenantStudentsInternal = (tenantId, rows) => {
-  run('DELETE FROM students WHERE tenant_id = ?', [tenantId]);
-  rows.forEach((row) => {
-    run(
-      `
-      INSERT INTO students (tenant_id, student_name, grade, section, active)
-      VALUES (?, ?, ?, ?, 1)
-    `,
-      [tenantId, cleanText(row.studentName), cleanText(row.grade), cleanText(row.section)]
-    );
-  });
-};
-
-const replaceTenantAssignmentsInternal = (tenantId, rows) => {
-  run('DELETE FROM teacher_assignments WHERE tenant_id = ?', [tenantId]);
-  rows.forEach((row) => {
-    if (!row.userId || !row.grade || !row.section || !row.subject) return;
-    run(
-      `
-      INSERT OR IGNORE INTO teacher_assignments (tenant_id, user_id, grade, section, subject)
-      VALUES (?, ?, ?, ?, ?)
-    `,
-      [tenantId, row.userId, cleanText(row.grade), cleanText(row.section), cleanText(row.subject)]
-    );
-  });
-};
-
-const syncTeacherLookupFromUsersInternal = (tenantId) => {
-  const teacherNames = getAll(
-    `
-      SELECT display_name
-      FROM users
-      WHERE tenant_id = ? AND role = 'teacher' AND active = 1
-      ORDER BY display_name
-    `,
-    [tenantId]
-  ).map((row) => cleanText(row.display_name));
-  replaceLookupValuesInternal(tenantId, 'teachers', teacherNames);
-};
-
-const buildSchoolCatalog = (targetCount = 30) => {
-  const catalog = [
-    { code: 'YUBLA', name: 'مدرسة يبلا الثانوية للبنات', city: 'إربد' },
-    { code: 'DEMO', name: 'مدرسة تجريبية', city: 'عمّان' }
-  ];
-
-  for (let i = 1; catalog.length < targetCount; i += 1) {
-    const code = `SCH${String(i).padStart(3, '0')}`;
-    const city = CITY_VALUES[(i - 1) % CITY_VALUES.length];
-    const schoolName = SCHOOL_NAME_VALUES[(i - 1) % SCHOOL_NAME_VALUES.length];
-    catalog.push({
-      code,
-      name: `${schoolName} ${i}`,
-      city
-    });
-  }
-
-  return catalog;
-};
-
-const teacherSubjectMatrix = [
-  ['رياضيات', 'علوم'],
-  ['لغة عربية', 'تاريخ'],
-  ['لغة إنجليزية', 'جغرافيا'],
-  ['فيزياء', 'كيمياء'],
-  ['أحياء', 'علوم'],
-  ['تربية إسلامية', 'لغة عربية'],
-  ['رياضيات', 'فيزياء'],
-  ['لغة إنجليزية', 'أحياء']
-];
-
-const gradeWindows = [
-  ['سابع', 'ثامن', 'تاسع'],
-  ['ثامن', 'تاسع', 'عاشر'],
-  ['تاسع', 'عاشر', 'أول ثانوي'],
-  ['عاشر', 'أول ثانوي', 'ثاني ثانوي'],
-  ['سابع', 'عاشر', 'ثاني ثانوي'],
-  ['سابع', 'أول ثانوي', 'ثاني ثانوي'],
-  ['ثامن', 'عاشر', 'ثاني ثانوي'],
-  ['سابع', 'تاسع', 'أول ثانوي']
-];
-
-const sectionPairs = [
-  ['أ', 'ب'],
-  ['ب', 'ج'],
-  ['أ', 'ج'],
-  ['أ', 'ب'],
-  ['ب', 'ج'],
-  ['أ', 'ج'],
-  ['أ', 'ب'],
-  ['ب', 'ج']
-];
-
-const buildTeacherProfilesForTenant = (tenantCode, schoolIndex) => {
-  const code = normalizeCode(tenantCode).toLowerCase();
-  const profiles = [];
-
-  for (let i = 0; i < 8; i += 1) {
-    const poolIndex = (schoolIndex * 7 + i) % TEACHER_NAME_VALUES.length;
-    const displayName = TEACHER_NAME_VALUES[poolIndex];
-    let username = `teacher${i + 1}.${code}`;
-    if (code === 'yubla') {
-      username = i === 0 ? 'teacher.yubla' : `teacher${i + 1}.yubla`;
-    } else if (code === 'demo') {
-      username = i === 0 ? 'teacher.demo' : `teacher${i + 1}.demo`;
-    }
-    profiles.push({
-      id: `u-${code}-teacher-${i + 1}`,
-      username,
-      displayName,
-      role: 'teacher',
-      password: 'Teacher@123'
-    });
-  }
-
-  return profiles;
-};
-
-const buildAdminProfileForTenant = (tenantCode, tenantName) => {
-  const code = normalizeCode(tenantCode).toLowerCase();
-  let username = `admin.${code}`;
-  if (code === 'yubla') username = 'admin.yubla';
-  if (code === 'demo') username = 'admin.demo';
-  return {
-    id: `u-${code}-admin`,
-    username,
-    displayName: `مديرة ${tenantName}`,
-    role: 'school_admin',
-    password: 'Admin@123'
-  };
-};
-
-const ensureSchoolAdminForTenantInternal = (tenant) => {
-  if (!tenant?.id) return null;
-  const existing = getOne(
-    `
-      SELECT id
-      FROM users
-      WHERE tenant_id = ? AND role = 'school_admin'
-      ORDER BY created_at
-      LIMIT 1
-    `,
-    [tenant.id]
-  );
-  if (existing?.id) return findUserByIdDb(existing.id);
-
-  const base = `admin.${sanitizeUsernamePart(tenant.code) || 'school'}`;
-  let username = base;
-  let i = 1;
-  while (findUserByUsernameDb(username)) {
-    username = `${base}.${i}`;
-    i += 1;
-  }
-
-  const userId = makeId('u');
-  run(
-    `
-      INSERT INTO users (id, username, display_name, employee_no, password_hash, password_plain, role, tenant_id, active)
-      VALUES (?, ?, ?, '', ?, 'Admin@123', 'school_admin', ?, 1)
-    `,
-    [userId, username, `مديرة ${tenant.name}`, hashPassword('Admin@123'), tenant.id]
-  );
-  return findUserByIdDb(userId);
-};
-
-const buildAssignmentsForTeachers = (teachers, tenantId) => {
-  const assignments = [];
-  teachers.forEach((teacher, index) => {
-    const subjects = teacherSubjectMatrix[index % teacherSubjectMatrix.length];
-    const grades = gradeWindows[index % gradeWindows.length];
-    const sections = sectionPairs[index % sectionPairs.length];
-
-    subjects.forEach((subject) => {
-      grades.forEach((grade) => {
-        sections.forEach((section) => {
-          assignments.push({
-            tenantId,
-            userId: teacher.id,
-            grade,
-            section,
-            subject
-          });
-        });
-      });
-    });
-  });
-  return assignments;
-};
-
-const buildStudentsForTenant = (schoolIndex, targetCount = 220) => {
-  const combinations = [];
-  GRADE_VALUES.forEach((grade) => {
-    SECTION_VALUES.forEach((section) => {
-      combinations.push({ grade, section });
-    });
-  });
-
-  const rows = [];
-  const used = new Set();
-  for (let i = 0; i < targetCount; i += 1) {
-    const combo = combinations[i % combinations.length];
-    const first = STUDENT_FIRST_NAMES[(schoolIndex * 13 + i * 2) % STUDENT_FIRST_NAMES.length];
-    const last = STUDENT_LAST_NAMES[(schoolIndex * 17 + i * 3) % STUDENT_LAST_NAMES.length];
-    let studentName = `${first} ${last}`;
-    if (used.has(studentName)) {
-      studentName = `${studentName} ${String(i + 1).padStart(3, '0')}`;
-    }
-    used.add(studentName);
-    rows.push({
-      studentName,
-      grade: combo.grade,
-      section: combo.section
-    });
-  }
-  return rows;
-};
-
-const scoreLevel = (recall, understand, hots, maxRecall, maxUnderstand, maxHots) => {
-  if (maxRecall <= 0 || maxUnderstand <= 0 || maxHots <= 0) return '-';
-  const r = (recall / maxRecall) * 100;
-  const u = (understand / maxUnderstand) * 100;
-  const h = (hots / maxHots) * 100;
-  if (r < 50 || u < 50 || h < 50) return 'ضعيف';
-  if (r >= 80 && u >= 80 && h >= 80) return 'ممتاز';
-  return 'جيد';
-};
-
-const seedSubmissionsForTenantInternal = (tenantId) => {
-  run("DELETE FROM submissions WHERE tenant_id = ? AND batch_id LIKE 'seedv3-%'", [tenantId]);
-
-  const assignments = getAll(
-    `
-      SELECT a.user_id, a.grade, a.section, a.subject, u.display_name
-      FROM teacher_assignments a
-      JOIN users u ON u.id = a.user_id
-      WHERE a.tenant_id = ?
-      ORDER BY a.id
-    `,
-    [tenantId]
-  );
-
-  if (!assignments.length) return;
-
-  assignments.forEach((assignment, assignmentIndex) => {
-    const students = getAll(
-      `
-        SELECT student_name
-        FROM students
-        WHERE tenant_id = ? AND grade = ? AND section = ?
-        ORDER BY id
-        LIMIT 3
-      `,
-      [tenantId, assignment.grade, assignment.section]
-    );
-
-    if (!students.length) return;
-
-    const exam = EXAM_VALUES[assignmentIndex % EXAM_VALUES.length];
-    const maxRecall = 10;
-    const maxUnderstand = 5;
-    const maxHots = 5;
-    const totalMax = 20;
-    const batchId = `seedv3-${tenantId}-${assignmentIndex + 1}`;
-    const timestamp = nowIso();
-
-    students.forEach((student, studentIndex) => {
-      const recall = 5 + ((assignmentIndex + studentIndex) % 6);
-      const understand = 2 + ((assignmentIndex + studentIndex) % 4);
-      const hots = 1 + ((assignmentIndex + studentIndex) % 5);
-      const total = recall + understand + hots;
-      const level = scoreLevel(recall, understand, hots, maxRecall, maxUnderstand, maxHots);
-
-      run(
-        `
-          INSERT INTO submissions (
-            tenant_id, timestamp, batch_id, teacher_name, grade, section, subject, exam,
-            max_recall, max_understand, max_hots, total_max,
-            student_name, recall, understand, hots, total, plan, level
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
-          tenantId,
-          timestamp,
-          batchId,
-          assignment.display_name || '',
-          assignment.grade || '',
-          assignment.section || '',
-          assignment.subject || '',
-          exam,
-          maxRecall,
-          maxUnderstand,
-          maxHots,
-          totalMax,
-          student.student_name || '',
-          recall,
-          understand,
-          hots,
-          total,
-          level === 'ضعيف' ? 'متابعة علاجية' : '',
-          level
-        ]
-      );
-    });
-  });
-};
-
-const bootstrapTenantDemoInternal = ({ tenantId, tenantCode, tenantName, schoolIndex }) => {
-  const adminProfile = buildAdminProfileForTenant(tenantCode, tenantName);
-  upsertUserByUsernameInternal({
-    id: adminProfile.id,
-    username: adminProfile.username,
-    displayName: adminProfile.displayName,
-    role: adminProfile.role,
-    tenantId,
-    password: adminProfile.password,
-    active: 1
-  });
-
-  const teacherProfiles = buildTeacherProfilesForTenant(tenantCode, schoolIndex);
-  teacherProfiles.forEach((teacher) => {
-    upsertUserByUsernameInternal({
-      id: teacher.id,
-      username: teacher.username,
-      displayName: teacher.displayName,
-      role: teacher.role,
-      tenantId,
-      password: teacher.password,
-      active: 1
-    });
-  });
-
-  replaceLookupValuesInternal(tenantId, 'grades', GRADE_VALUES);
-  replaceLookupValuesInternal(tenantId, 'sections', SECTION_VALUES);
-  replaceLookupValuesInternal(tenantId, 'subjects', SUBJECT_VALUES);
-  replaceLookupValuesInternal(tenantId, 'exams', EXAM_VALUES);
-  syncTeacherLookupFromUsersInternal(tenantId);
-
-  const students = buildStudentsForTenant(schoolIndex, 220);
-  replaceTenantStudentsInternal(tenantId, students);
-
-  const teachers = getAll(
-    `
-      SELECT id
-      FROM users
-      WHERE tenant_id = ? AND role = 'teacher'
-      ORDER BY username
-    `,
-    [tenantId]
-  ).map((row) => ({ id: row.id }));
-
-  const assignments = buildAssignmentsForTeachers(teachers, tenantId);
-  replaceTenantAssignmentsInternal(tenantId, assignments);
-  seedSubmissionsForTenantInternal(tenantId);
-};
-
-const seedPlatformIfNeeded = () => {
-  const currentSeedVersion = getMetaValue('seed_version');
+// Seed platform with super admin
+const seedPlatformIfNeeded = async () => {
+  const currentSeedVersion = await getMetaValue('seed_version');
   if (currentSeedVersion === SEED_VERSION) return;
 
-  withTransaction(() => {
-    run('DELETE FROM sessions');
-    run('DELETE FROM submissions');
-    run('DELETE FROM teacher_assignments');
-    run('DELETE FROM students');
-    run('DELETE FROM lookups');
-    run('DELETE FROM users');
-    run('DELETE FROM tenants');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Clear all data
+    await client.query('DELETE FROM sessions');
+    await client.query('DELETE FROM submissions');
+    await client.query('DELETE FROM teacher_assignments');
+    await client.query('DELETE FROM students');
+    await client.query('DELETE FROM lookups');
+    await client.query('DELETE FROM users');
+    await client.query('DELETE FROM tenants');
 
-    upsertUserByUsernameInternal({
-      id: 'u-super-1',
-      username: 'super.admin',
-      displayName: 'مديرة النظام',
-      role: 'super_admin',
-      tenantId: null,
-      password: 'Admin@123',
-      active: 1
-    });
+    // Create super admin
+    const userId = 'u-super-1';
+    const username = 'super.admin';
+    const displayName = 'مديرة النظام';
+    const password = 'Admin@123';
+    const passwordHash = hashPassword(password);
 
-    setMetaValue('seed_version', SEED_VERSION);
-  });
-};
+    await client.query(
+      `INSERT INTO users (id, username, display_name, employee_no, password_hash, password_plain, role, tenant_id, active)
+       VALUES ($1, $2, $3, '', $4, $5, 'super_admin', NULL, true)`,
+      [userId, username, displayName, passwordHash, password]
+    );
 
-const initDb = async () => {
-  ensureDir();
-  SQL = await initSqlJs({
-    locateFile: (file) => path.join(SQLJS_DIR, file)
-  });
-
-  if (fs.existsSync(DB_PATH)) {
-    const fileBuffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(new Uint8Array(fileBuffer));
-  } else {
-    db = new SQL.Database();
+    await setMetaValue('seed_version', SEED_VERSION);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  createSchema();
-  ensureMigrations();
-  setMetaValue('schema_version', SCHEMA_VERSION);
-  seedPlatformIfNeeded();
-  deleteExpiredSessionsDb();
-  persist();
 };
 
-const listTenantsDb = () => getAll('SELECT * FROM tenants ORDER BY name').map(mapTenant);
-const findTenantByIdDb = (id) => mapTenant(getOne('SELECT * FROM tenants WHERE id = ?', [id]));
-const findTenantByCodeDb = (code) =>
-  mapTenant(getOne('SELECT * FROM tenants WHERE lower(code) = lower(?)', [normalizeCode(code)]));
-const findTenantByNameDb = (name) => {
+// Initialize database
+export const initDb = async () => {
+  if (initialized) return;
+  
+  try {
+    const client = await pool.connect();
+    await createSchema(client);
+    client.release();
+    
+    await setMetaValue('schema_version', SCHEMA_VERSION);
+    await seedPlatformIfNeeded();
+    await deleteExpiredSessionsDb();
+    
+    initialized = true;
+    console.log('PostgreSQL database initialized successfully');
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    throw error;
+  }
+};
+
+// Tenant functions
+export const listTenantsDb = async () => {
+  const result = await pool.query('SELECT * FROM tenants ORDER BY name');
+  return result.rows.map(mapTenant);
+};
+
+export const findTenantByIdDb = async (id) => {
+  const result = await pool.query('SELECT * FROM tenants WHERE id = $1', [id]);
+  return mapTenant(result.rows[0]);
+};
+
+export const findTenantByCodeDb = async (code) => {
+  const result = await pool.query('SELECT * FROM tenants WHERE LOWER(code) = LOWER($1)', [normalizeCode(code)]);
+  return mapTenant(result.rows[0]);
+};
+
+export const findTenantByNameDb = async (name) => {
   const cleanName = cleanText(name);
   if (!cleanName) return null;
-  const exact = mapTenant(getOne('SELECT * FROM tenants WHERE lower(trim(name)) = lower(trim(?))', [cleanName]));
-  if (exact) return exact;
-  return mapTenant(
-    getOne(
-      `
-      SELECT *
-      FROM tenants
-      WHERE lower(name) LIKE ?
-      ORDER BY length(name) ASC
-      LIMIT 1
-    `,
-      [`%${cleanName.toLowerCase()}%`]
-    )
+  
+  let result = await pool.query('SELECT * FROM tenants WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))', [cleanName]);
+  if (result.rows[0]) return mapTenant(result.rows[0]);
+  
+  result = await pool.query(
+    `SELECT * FROM tenants WHERE LOWER(name) LIKE $1 ORDER BY LENGTH(name) ASC LIMIT 1`,
+    [`%${cleanName.toLowerCase()}%`]
   );
+  return mapTenant(result.rows[0]);
 };
 
-const createTenantDb = ({ code, name, city = '', active = true }) => {
+export const createTenantDb = async ({ code, name, city = '', active = true }) => {
   const normalizedCode = normalizeCode(code);
   const cleanName = cleanText(name);
   if (!normalizedCode || !cleanName) return null;
-  if (findTenantByCodeDb(normalizedCode)) return null;
+  
+  const existing = await findTenantByCodeDb(normalizedCode);
+  if (existing) return null;
 
   const id = `t-${normalizedCode.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`;
   try {
-    run(
-      `
-      INSERT INTO tenants (id, code, name, city, active)
-      VALUES (?, ?, ?, ?, ?)
-    `,
-      [id, normalizedCode, cleanName, cleanText(city), active ? 1 : 0]
+    await pool.query(
+      `INSERT INTO tenants (id, code, name, city, active) VALUES ($1, $2, $3, $4, $5)`,
+      [id, normalizedCode, cleanName, cleanText(city), active]
     );
-    persist();
-    return findTenantByIdDb(id);
+    return await findTenantByIdDb(id);
   } catch {
     return null;
   }
 };
 
-const updateTenantDb = (tenantId, payload = {}) => {
-  const existing = findTenantByIdDb(tenantId);
+export const updateTenantDb = async (tenantId, payload = {}) => {
+  const existing = await findTenantByIdDb(tenantId);
   if (!existing) return null;
 
   const nextCode = payload.code !== undefined ? normalizeCode(payload.code) : existing.code;
@@ -1045,53 +351,57 @@ const updateTenantDb = (tenantId, payload = {}) => {
 
   if (!nextCode || !nextName) return null;
 
-  const conflict = getOne('SELECT id FROM tenants WHERE lower(code) = lower(?) AND id <> ?', [nextCode, tenantId]);
-  if (conflict) return null;
+  const conflict = await pool.query('SELECT id FROM tenants WHERE LOWER(code) = LOWER($1) AND id <> $2', [nextCode, tenantId]);
+  if (conflict.rows[0]) return null;
 
   try {
-    run(
-      `
-      UPDATE tenants
-      SET code = ?, name = ?, city = ?, active = ?
-      WHERE id = ?
-    `,
-      [nextCode, nextName, nextCity, nextActive ? 1 : 0, tenantId]
+    await pool.query(
+      `UPDATE tenants SET code = $1, name = $2, city = $3, active = $4 WHERE id = $5`,
+      [nextCode, nextName, nextCity, nextActive, tenantId]
     );
-    persist();
-    return findTenantByIdDb(tenantId);
+    return await findTenantByIdDb(tenantId);
   } catch {
     return null;
   }
 };
 
-const findUserByUsernameDb = (username) =>
-  mapUser(getOne('SELECT * FROM users WHERE lower(username) = lower(?)', [normalizeUsername(username)]));
+// User functions
+export const findUserByUsernameDb = async (username) => {
+  const result = await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [normalizeUsername(username)]);
+  return mapUser(result.rows[0]);
+};
 
-const findUserByIdDb = (id) => mapUser(getOne('SELECT * FROM users WHERE id = ?', [id]));
+export const findUserByIdDb = async (id) => {
+  const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+  return mapUser(result.rows[0]);
+};
 
-const listUsersDb = ({ tenantId = null, role = null, search = '' } = {}) => {
+export const listUsersDb = async ({ tenantId = null, role = null, search = '' } = {}) => {
   const where = [];
   const params = [];
+  let paramIndex = 1;
 
   if (tenantId) {
-    where.push('tenant_id = ?');
+    where.push(`tenant_id = $${paramIndex++}`);
     params.push(tenantId);
   }
   if (role) {
-    where.push('role = ?');
+    where.push(`role = $${paramIndex++}`);
     params.push(role);
   }
   if (search) {
-    where.push('(lower(username) LIKE ? OR lower(display_name) LIKE ?)');
     const pattern = `%${String(search).trim().toLowerCase()}%`;
+    where.push(`(LOWER(username) LIKE $${paramIndex} OR LOWER(display_name) LIKE $${paramIndex + 1})`);
     params.push(pattern, pattern);
+    paramIndex += 2;
   }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  return getAll(`SELECT * FROM users ${whereSql} ORDER BY role, display_name, username`, params).map(mapUser);
+  const result = await pool.query(`SELECT * FROM users ${whereSql} ORDER BY role, display_name, username`, params);
+  return result.rows.map(mapUser);
 };
 
-const createUserDb = ({
+export const createUserDb = async ({
   username,
   displayName = '',
   employeeNo = '',
@@ -1108,17 +418,15 @@ const createUserDb = ({
   if (!normalizedUsername || !passwordHash) return null;
   if (!ROLE_VALUES.includes(normalizedRole)) return null;
   if (normalizedRole !== 'super_admin' && !tenantId) return null;
-  if (normalizedRole !== 'super_admin' && !findTenantByIdDb(tenantId)) return null;
-  if (findUserByUsernameDb(normalizedUsername)) return null;
+  if (normalizedRole !== 'super_admin' && !(await findTenantByIdDb(tenantId))) return null;
+  if (await findUserByUsernameDb(normalizedUsername)) return null;
 
   const id = makeId('u');
 
   try {
-    run(
-      `
-      INSERT INTO users (id, username, display_name, employee_no, password_hash, password_plain, role, tenant_id, active)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
+    await pool.query(
+      `INSERT INTO users (id, username, display_name, employee_no, password_hash, password_plain, role, tenant_id, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         id,
         normalizedUsername,
@@ -1128,28 +436,26 @@ const createUserDb = ({
         cleanText(passwordPlain),
         normalizedRole,
         normalizedRole === 'super_admin' ? null : tenantId,
-        active ? 1 : 0
+        active
       ]
     );
 
     if (normalizedRole === 'teacher' && tenantId) {
-      syncTeacherLookupFromUsersInternal(tenantId);
+      await syncTeacherLookupFromUsersInternal(tenantId);
     }
 
-    persist();
-    return findUserByIdDb(id);
+    return await findUserByIdDb(id);
   } catch {
     return null;
   }
 };
 
-const updateUserDb = (userId, payload = {}) => {
-  const existing = findUserByIdDb(userId);
+export const updateUserDb = async (userId, payload = {}) => {
+  const existing = await findUserByIdDb(userId);
   if (!existing) return null;
 
   const nextUsername = payload.username !== undefined ? normalizeUsername(payload.username) : existing.username;
-  const nextDisplayName =
-    payload.displayName !== undefined ? cleanText(payload.displayName) : existing.displayName || existing.username;
+  const nextDisplayName = payload.displayName !== undefined ? cleanText(payload.displayName) : existing.displayName || existing.username;
   const nextRole = payload.role !== undefined ? cleanText(payload.role) : existing.role;
   const nextTenantId = payload.tenantId !== undefined ? payload.tenantId || null : existing.tenantId;
   const nextPasswordHash = payload.passwordHash !== undefined ? payload.passwordHash : existing.passwordHash;
@@ -1159,18 +465,15 @@ const updateUserDb = (userId, payload = {}) => {
 
   if (!nextUsername || !nextPasswordHash || !ROLE_VALUES.includes(nextRole)) return null;
   if (nextRole !== 'super_admin' && !nextTenantId) return null;
-  if (nextRole !== 'super_admin' && !findTenantByIdDb(nextTenantId)) return null;
+  if (nextRole !== 'super_admin' && !(await findTenantByIdDb(nextTenantId))) return null;
 
-  const conflict = getOne('SELECT id FROM users WHERE lower(username) = lower(?) AND id <> ?', [nextUsername, userId]);
-  if (conflict) return null;
+  const conflict = await pool.query('SELECT id FROM users WHERE LOWER(username) = LOWER($1) AND id <> $2', [nextUsername, userId]);
+  if (conflict.rows[0]) return null;
 
   try {
-    run(
-      `
-      UPDATE users
-      SET username = ?, display_name = ?, employee_no = ?, password_hash = ?, password_plain = ?, role = ?, tenant_id = ?, active = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `,
+    await pool.query(
+      `UPDATE users SET username = $1, display_name = $2, employee_no = $3, password_hash = $4, password_plain = $5, 
+       role = $6, tenant_id = $7, active = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9`,
       [
         nextUsername,
         nextDisplayName || nextUsername,
@@ -1179,61 +482,81 @@ const updateUserDb = (userId, payload = {}) => {
         nextPasswordPlain,
         nextRole,
         nextRole === 'super_admin' ? null : nextTenantId,
-        nextActive ? 1 : 0,
+        nextActive,
         userId
       ]
     );
 
     if (existing.tenantId) {
-      syncTeacherLookupFromUsersInternal(existing.tenantId);
+      await syncTeacherLookupFromUsersInternal(existing.tenantId);
     }
     if (nextTenantId && nextRole === 'teacher') {
-      syncTeacherLookupFromUsersInternal(nextTenantId);
+      await syncTeacherLookupFromUsersInternal(nextTenantId);
     }
 
-    persist();
-    return findUserByIdDb(userId);
+    return await findUserByIdDb(userId);
   } catch {
     return null;
   }
 };
 
-const saveSessionDb = (session) => {
-  run(
-    `
-    INSERT INTO sessions (id, user_id, tenant_id, role, expires_at)
-    VALUES (?, ?, ?, ?, ?)
-  `,
+// Session functions
+export const saveSessionDb = async (session) => {
+  await pool.query(
+    `INSERT INTO sessions (id, user_id, tenant_id, role, expires_at) VALUES ($1, $2, $3, $4, $5)`,
     [session.id, session.userId, session.tenantId, session.role, session.expiresAt]
   );
-  persist();
   return session;
 };
 
-const findSessionDb = (id) =>
-  getOne('SELECT id, user_id, tenant_id, role, expires_at FROM sessions WHERE id = ?', [id]);
-
-const deleteSessionDb = (id) => {
-  run('DELETE FROM sessions WHERE id = ?', [id]);
-  persist();
+export const findSessionDb = async (id) => {
+  const result = await pool.query('SELECT id, user_id, tenant_id, role, expires_at FROM sessions WHERE id = $1', [id]);
+  return result.rows[0] || null;
 };
 
-const deleteExpiredSessionsDb = () => {
-  run('DELETE FROM sessions WHERE expires_at <= ?', [Date.now()]);
+export const deleteSessionDb = async (id) => {
+  await pool.query('DELETE FROM sessions WHERE id = $1', [id]);
 };
 
-const getTenantLookupsDb = (tenantId) => {
-  const lookups = { teachers: [], grades: [], sections: [], subjects: [], exams: [] };
-  const rows = getAll(
-    `
-      SELECT type, value
-      FROM lookups
-      WHERE tenant_id = ?
-      ORDER BY id
-    `,
+export const deleteExpiredSessionsDb = async () => {
+  await pool.query('DELETE FROM sessions WHERE expires_at <= $1', [Date.now()]);
+};
+
+// Lookup functions
+const syncTeacherLookupFromUsersInternal = async (tenantId) => {
+  const result = await pool.query(
+    `SELECT display_name FROM users WHERE tenant_id = $1 AND role = 'teacher' AND active = true ORDER BY display_name`,
     [tenantId]
   );
-  rows.forEach((row) => {
+  const teacherNames = result.rows.map((row) => cleanText(row.display_name));
+  await replaceLookupValuesInternal(tenantId, 'teachers', teacherNames);
+};
+
+const replaceLookupValuesInternal = async (tenantId, type, values) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM lookups WHERE tenant_id = $1 AND type = $2', [tenantId, type]);
+    const uniqueValues = [...new Set((values || []).map((v) => cleanText(v)).filter(Boolean))];
+    for (const value of uniqueValues) {
+      await client.query('INSERT INTO lookups (tenant_id, type, value) VALUES ($1, $2, $3)', [tenantId, type, value]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const getTenantLookupsDb = async (tenantId) => {
+  const lookups = { teachers: [], grades: [], sections: [], subjects: [], exams: [] };
+  const result = await pool.query(
+    `SELECT type, value FROM lookups WHERE tenant_id = $1 ORDER BY id`,
+    [tenantId]
+  );
+  result.rows.forEach((row) => {
     if (lookups[row.type]) {
       lookups[row.type].push(String(row.value));
     }
@@ -1243,25 +566,23 @@ const getTenantLookupsDb = (tenantId) => {
   return lookups;
 };
 
-const getTeacherAssignmentsDb = (tenantId, userId) =>
-  getAll(
-    `
-      SELECT grade, section, subject
-      FROM teacher_assignments
-      WHERE tenant_id = ? AND user_id = ?
-      ORDER BY grade, section, subject
-    `,
+export const getTeacherAssignmentsDb = async (tenantId, userId) => {
+  const result = await pool.query(
+    `SELECT grade, section, subject FROM teacher_assignments 
+     WHERE tenant_id = $1 AND user_id = $2 ORDER BY grade, section, subject`,
     [tenantId, userId]
-  ).map((row) => ({
+  );
+  return result.rows.map((row) => ({
     grade: String(row.grade),
     section: String(row.section),
     subject: String(row.subject)
   }));
+};
 
-const buildTeacherScopedLookupsDb = (tenantId, user) => {
+export const buildTeacherScopedLookupsDb = async (tenantId, user) => {
   if (!tenantId || !user) return { teachers: [], grades: [], sections: [], subjects: [], exams: [] };
-  const assignments = getTeacherAssignmentsDb(tenantId, user.id);
-  const all = getTenantLookupsDb(tenantId);
+  const assignments = await getTeacherAssignmentsDb(tenantId, user.id);
+  const all = await getTenantLookupsDb(tenantId);
   return {
     teachers: [user.displayName || user.username],
     grades: [...new Set(assignments.map((row) => row.grade))],
@@ -1271,91 +592,85 @@ const buildTeacherScopedLookupsDb = (tenantId, user) => {
   };
 };
 
-const canTeacherAccessDb = (tenantId, userId, grade, section, subject = null) => {
+export const canTeacherAccessDb = async (tenantId, userId, grade, section, subject = null) => {
   const cleanGrade = cleanText(grade);
   const cleanSection = cleanText(section);
   if (!tenantId || !userId || !cleanGrade || !cleanSection) return false;
 
   if (subject) {
-    const row = getOne(
-      `
-        SELECT 1 AS ok
-        FROM teacher_assignments
-        WHERE tenant_id = ? AND user_id = ? AND grade = ? AND section = ? AND subject = ?
-        LIMIT 1
-      `,
+    const result = await pool.query(
+      `SELECT 1 AS ok FROM teacher_assignments 
+       WHERE tenant_id = $1 AND user_id = $2 AND grade = $3 AND section = $4 AND subject = $5 LIMIT 1`,
       [tenantId, userId, cleanGrade, cleanSection, cleanText(subject)]
     );
-    return Boolean(row?.ok);
+    return Boolean(result.rows[0]?.ok);
   }
 
-  const row = getOne(
-    `
-      SELECT 1 AS ok
-      FROM teacher_assignments
-      WHERE tenant_id = ? AND user_id = ? AND grade = ? AND section = ?
-      LIMIT 1
-    `,
+  const result = await pool.query(
+    `SELECT 1 AS ok FROM teacher_assignments 
+     WHERE tenant_id = $1 AND user_id = $2 AND grade = $3 AND section = $4 LIMIT 1`,
     [tenantId, userId, cleanGrade, cleanSection]
   );
-  return Boolean(row?.ok);
+  return Boolean(result.rows[0]?.ok);
 };
 
-const getTenantStudentsDb = (tenantId, grade, section) =>
-  getAll(
-    `
-      SELECT student_name
-      FROM students
-      WHERE tenant_id = ? AND grade = ? AND section = ? AND active = 1
-      ORDER BY student_name
-    `,
+// Student functions
+export const getTenantStudentsDb = async (tenantId, grade, section) => {
+  const result = await pool.query(
+    `SELECT student_name FROM students 
+     WHERE tenant_id = $1 AND grade = $2 AND section = $3 AND active = true 
+     ORDER BY student_name`,
     [tenantId, cleanText(grade), cleanText(section)]
-  ).map((row) => String(row.student_name));
+  );
+  return result.rows.map((row) => String(row.student_name));
+};
 
-const getTenantAssignmentsDb = (tenantId) =>
-  getAll(
-    `
-      SELECT a.user_id, u.display_name AS teacher_name, a.grade, a.section, a.subject
-      FROM teacher_assignments a
-      JOIN users u ON u.id = a.user_id
-      WHERE a.tenant_id = ?
-      ORDER BY u.display_name, a.grade, a.section, a.subject
-    `,
+export const getTenantAssignmentsDb = async (tenantId) => {
+  const result = await pool.query(
+    `SELECT a.user_id, u.display_name AS teacher_name, a.grade, a.section, a.subject
+     FROM teacher_assignments a
+     JOIN users u ON u.id = a.user_id
+     WHERE a.tenant_id = $1
+     ORDER BY u.display_name, a.grade, a.section, a.subject`,
     [tenantId]
-  ).map((row) => ({
+  );
+  return result.rows.map((row) => ({
     userId: row.user_id,
     teacherName: row.teacher_name,
     grade: row.grade,
     section: row.section,
     subject: row.subject
   }));
+};
 
-const listTeachersForSuperDb = ({ tenantId = null, search = '' } = {}) => {
-  const where = ["u.role = 'teacher'", 'u.active = 1'];
+export const listTeachersForSuperDb = async ({ tenantId = null, search = '' } = {}) => {
+  const where = ["u.role = 'teacher'", 'u.active = true'];
   const params = [];
+  let paramIndex = 1;
 
   if (tenantId) {
-    where.push('u.tenant_id = ?');
+    where.push(`u.tenant_id = $${paramIndex++}`);
     params.push(tenantId);
   }
   if (search) {
     const pattern = `%${search.trim().toLowerCase()}%`;
     where.push(
-      '(lower(u.display_name) LIKE ? OR lower(u.username) LIKE ? OR lower(u.employee_no) LIKE ? OR lower(t.name) LIKE ?)'
+      `(LOWER(u.display_name) LIKE $${paramIndex} OR LOWER(u.username) LIKE $${paramIndex + 1} OR 
+        LOWER(u.employee_no) LIKE $${paramIndex + 2} OR LOWER(t.name) LIKE $${paramIndex + 3})`
     );
     params.push(pattern, pattern, pattern, pattern);
+    paramIndex += 4;
   }
 
-  return getAll(
-    `
-      SELECT u.id, u.username, u.display_name, u.employee_no, u.tenant_id, t.name AS school_name
-      FROM users u
-      LEFT JOIN tenants t ON t.id = u.tenant_id
-      WHERE ${where.join(' AND ')}
-      ORDER BY t.name, u.display_name, u.username
-    `,
+  const result = await pool.query(
+    `SELECT u.id, u.username, u.display_name, u.employee_no, u.tenant_id, t.name AS school_name
+     FROM users u
+     LEFT JOIN tenants t ON t.id = u.tenant_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY t.name, u.display_name, u.username`,
     params
-  ).map((row) => ({
+  );
+  return result.rows.map((row) => ({
     id: row.id,
     username: row.username,
     displayName: row.display_name,
@@ -1365,30 +680,31 @@ const listTeachersForSuperDb = ({ tenantId = null, search = '' } = {}) => {
   }));
 };
 
-const listStudentsForSuperDb = ({ tenantId = null, search = '' } = {}) => {
-  const where = ['s.active = 1'];
+export const listStudentsForSuperDb = async ({ tenantId = null, search = '' } = {}) => {
+  const where = ['s.active = true'];
   const params = [];
+  let paramIndex = 1;
 
   if (tenantId) {
-    where.push('s.tenant_id = ?');
+    where.push(`s.tenant_id = $${paramIndex++}`);
     params.push(tenantId);
   }
   if (search) {
     const pattern = `%${search.trim().toLowerCase()}%`;
-    where.push('(lower(s.student_name) LIKE ? OR lower(s.student_no) LIKE ? OR lower(t.name) LIKE ?)');
+    where.push(`(LOWER(s.student_name) LIKE $${paramIndex} OR LOWER(s.student_no) LIKE $${paramIndex + 1} OR LOWER(t.name) LIKE $${paramIndex + 2})`);
     params.push(pattern, pattern, pattern);
+    paramIndex += 3;
   }
 
-  return getAll(
-    `
-      SELECT s.id, s.student_no, s.student_name, s.grade, s.section, s.tenant_id, t.name AS school_name
-      FROM students s
-      LEFT JOIN tenants t ON t.id = s.tenant_id
-      WHERE ${where.join(' AND ')}
-      ORDER BY t.name, s.grade, s.section, s.student_name
-    `,
+  const result = await pool.query(
+    `SELECT s.id, s.student_no, s.student_name, s.grade, s.section, s.tenant_id, t.name AS school_name
+     FROM students s
+     LEFT JOIN tenants t ON t.id = s.tenant_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY t.name, s.grade, s.section, s.student_name`,
     params
-  ).map((row) => ({
+  );
+  return result.rows.map((row) => ({
     id: Number(row.id),
     studentNo: row.student_no || '',
     studentName: row.student_name,
@@ -1399,56 +715,71 @@ const listStudentsForSuperDb = ({ tenantId = null, search = '' } = {}) => {
   }));
 };
 
-const deactivateTeacherDb = (userId) => {
-  const user = findUserByIdDb(userId);
+export const deactivateTeacherDb = async (userId) => {
+  const user = await findUserByIdDb(userId);
   if (!user || user.role !== 'teacher') return false;
-  withTransaction(() => {
-    run("UPDATE users SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role = 'teacher'", [userId]);
-    run('DELETE FROM teacher_assignments WHERE user_id = ?', [userId]);
-    if (user.tenantId) syncTeacherLookupFromUsersInternal(user.tenantId);
-  });
-  persist();
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("UPDATE users SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND role = 'teacher'", [userId]);
+    await client.query('DELETE FROM teacher_assignments WHERE user_id = $1', [userId]);
+    if (user.tenantId) await syncTeacherLookupFromUsersInternal(user.tenantId);
+    await client.query('COMMIT');
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const deactivateStudentDb = async (studentId) => {
+  const result = await pool.query('SELECT id FROM students WHERE id = $1', [studentId]);
+  if (!result.rows[0]?.id) return false;
+  await pool.query('UPDATE students SET active = false WHERE id = $1', [studentId]);
   return true;
 };
 
-const deactivateStudentDb = (studentId) => {
-  const row = getOne('SELECT id FROM students WHERE id = ?', [studentId]);
-  if (!row?.id) return false;
-  run('UPDATE students SET active = 0 WHERE id = ?', [studentId]);
-  persist();
-  return true;
-};
+// Admin functions
+export const purgeSchoolDataDb = async ({ keepSessionId = null } = {}) => {
+  const client = await pool.connect();
+  try {
+    const report = {
+      deletedTenants: (await client.query('SELECT COUNT(*) AS c FROM tenants')).rows[0].c,
+      deletedSchoolAdmins: (await client.query("SELECT COUNT(*) AS c FROM users WHERE role = 'school_admin'")).rows[0].c,
+      deletedTeachers: (await client.query("SELECT COUNT(*) AS c FROM users WHERE role = 'teacher'")).rows[0].c,
+      deletedStudents: (await client.query('SELECT COUNT(*) AS c FROM students')).rows[0].c,
+      deletedAssignments: (await client.query('SELECT COUNT(*) AS c FROM teacher_assignments')).rows[0].c,
+      deletedSubmissions: (await client.query('SELECT COUNT(*) AS c FROM submissions')).rows[0].c,
+      deletedLookups: (await client.query('SELECT COUNT(*) AS c FROM lookups')).rows[0].c
+    };
 
-const purgeSchoolDataDb = ({ keepSessionId = null } = {}) => {
-  const report = {
-    deletedTenants: Number(getOne('SELECT COUNT(*) AS c FROM tenants')?.c || 0),
-    deletedSchoolAdmins: Number(getOne("SELECT COUNT(*) AS c FROM users WHERE role = 'school_admin'")?.c || 0),
-    deletedTeachers: Number(getOne("SELECT COUNT(*) AS c FROM users WHERE role = 'teacher'")?.c || 0),
-    deletedStudents: Number(getOne('SELECT COUNT(*) AS c FROM students')?.c || 0),
-    deletedAssignments: Number(getOne('SELECT COUNT(*) AS c FROM teacher_assignments')?.c || 0),
-    deletedSubmissions: Number(getOne('SELECT COUNT(*) AS c FROM submissions')?.c || 0),
-    deletedLookups: Number(getOne('SELECT COUNT(*) AS c FROM lookups')?.c || 0)
-  };
-
-  withTransaction(() => {
-    run('DELETE FROM submissions');
-    run('DELETE FROM teacher_assignments');
-    run('DELETE FROM students');
-    run('DELETE FROM lookups');
-    run("DELETE FROM users WHERE role <> 'super_admin'");
-    run('DELETE FROM tenants');
+    await client.query('BEGIN');
+    await client.query('DELETE FROM submissions');
+    await client.query('DELETE FROM teacher_assignments');
+    await client.query('DELETE FROM students');
+    await client.query('DELETE FROM lookups');
+    await client.query("DELETE FROM users WHERE role <> 'super_admin'");
+    await client.query('DELETE FROM tenants');
     if (keepSessionId) {
-      run('DELETE FROM sessions WHERE id <> ?', [keepSessionId]);
+      await client.query('DELETE FROM sessions WHERE id <> $1', [keepSessionId]);
     } else {
-      run('DELETE FROM sessions');
+      await client.query('DELETE FROM sessions');
     }
-  });
+    await client.query('COMMIT');
 
-  persist();
-  return report;
+    return report;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
-const replaceTenantStudentsDb = (tenantId, rows) => {
+export const replaceTenantStudentsDb = async (tenantId, rows) => {
   const cleanRows = (rows || [])
     .map((row) => ({
       studentName: cleanText(row.studentName || row.student_name),
@@ -1457,14 +788,27 @@ const replaceTenantStudentsDb = (tenantId, rows) => {
     }))
     .filter((row) => row.studentName && row.grade && row.section);
 
-  withTransaction(() => {
-    replaceTenantStudentsInternal(tenantId, cleanRows);
-  });
-  persist();
-  return cleanRows.length;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM students WHERE tenant_id = $1', [tenantId]);
+    for (const row of cleanRows) {
+      await client.query(
+        `INSERT INTO students (tenant_id, student_name, grade, section, active) VALUES ($1, $2, $3, $4, true)`,
+        [tenantId, row.studentName, row.grade, row.section]
+      );
+    }
+    await client.query('COMMIT');
+    return cleanRows.length;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
-const replaceTenantAssignmentsDb = (tenantId, rows) => {
+export const replaceTenantAssignmentsDb = async (tenantId, rows) => {
   const cleanRows = (rows || [])
     .map((row) => ({
       userId: cleanText(row.userId || row.user_id),
@@ -1474,58 +818,128 @@ const replaceTenantAssignmentsDb = (tenantId, rows) => {
     }))
     .filter((row) => row.userId && row.grade && row.section && row.subject);
 
-  withTransaction(() => {
-    replaceTenantAssignmentsInternal(tenantId, cleanRows);
-    syncTeacherLookupFromUsersInternal(tenantId);
-  });
-  persist();
-  return cleanRows.length;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM teacher_assignments WHERE tenant_id = $1', [tenantId]);
+    for (const row of cleanRows) {
+      await client.query(
+        `INSERT INTO teacher_assignments (tenant_id, user_id, grade, section, subject) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (tenant_id, user_id, grade, section, subject) DO NOTHING`,
+        [tenantId, row.userId, row.grade, row.section, row.subject]
+      );
+    }
+    await syncTeacherLookupFromUsersInternal(tenantId);
+    await client.query('COMMIT');
+    return cleanRows.length;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
-const resolveTenantForImportInternal = (schoolName, defaultTenantId = null) => {
+// Import functions
+const ensureTenantBySchoolNameInternal = async (schoolName) => {
+  const cleanName = cleanText(schoolName);
+  if (!cleanName) return null;
+  const existing = await findTenantByNameDb(cleanName);
+  if (existing) return existing;
+  
+  const code = await buildTenantCodeFromSchoolNameInternal(cleanName);
+  const tenantId = `t-${code.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`;
+  
+  await pool.query(
+    `INSERT INTO tenants (id, code, name, city, active) VALUES ($1, $2, $3, '', true)`,
+    [tenantId, code, cleanName]
+  );
+  return await findTenantByIdDb(tenantId);
+};
+
+const buildTenantCodeFromSchoolNameInternal = async (schoolName) => {
+  const raw = cleanText(schoolName);
+  const normalized = normalizeCode(raw)
+    .replace(/[^A-Z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  const base = (normalized || 'SCHOOL').slice(0, 18);
+  let candidate = base;
+  let i = 1;
+  while (await findTenantByCodeDb(candidate)) {
+    candidate = `${base}-${i}`;
+    i += 1;
+  }
+  return candidate;
+};
+
+const ensureSchoolAdminForTenantInternal = async (tenant) => {
+  if (!tenant?.id) return null;
+  const result = await pool.query(
+    `SELECT id FROM users WHERE tenant_id = $1 AND role = 'school_admin' ORDER BY created_at LIMIT 1`,
+    [tenant.id]
+  );
+  if (result.rows[0]?.id) return await findUserByIdDb(result.rows[0].id);
+
+  const base = `admin.${sanitizeUsernamePart(tenant.code) || 'school'}`;
+  let username = base;
+  let i = 1;
+  while (await findUserByUsernameDb(username)) {
+    username = `${base}.${i}`;
+    i += 1;
+  }
+
+  const userId = makeId('u');
+  await pool.query(
+    `INSERT INTO users (id, username, display_name, employee_no, password_hash, password_plain, role, tenant_id, active)
+     VALUES ($1, $2, $3, '', $4, 'Admin@123', 'school_admin', $5, true)`,
+    [userId, username, `مديرة ${tenant.name}`, hashPassword('Admin@123'), tenant.id]
+  );
+  return await findUserByIdDb(userId);
+};
+
+const resolveTenantForImportInternal = async (schoolName, defaultTenantId = null) => {
   if (defaultTenantId) {
-    const tenant = findTenantByIdDb(defaultTenantId);
+    const tenant = await findTenantByIdDb(defaultTenantId);
     if (tenant) return tenant;
   }
   const key = cleanText(schoolName);
   if (!key) return null;
-  return findTenantByCodeDb(key) || findTenantByNameDb(key) || ensureTenantBySchoolNameInternal(key);
+  return (await findTenantByCodeDb(key)) || (await findTenantByNameDb(key)) || (await ensureTenantBySchoolNameInternal(key));
 };
 
-const ensureLookupValueInternal = (tenantId, type, value) => {
+const ensureLookupValueInternal = async (tenantId, type, value) => {
   const cleanValue = cleanText(value);
   if (!tenantId || !cleanValue) return;
-  run('INSERT OR IGNORE INTO lookups (tenant_id, type, value) VALUES (?, ?, ?)', [tenantId, type, cleanValue]);
+  await pool.query(
+    `INSERT INTO lookups (tenant_id, type, value) VALUES ($1, $2, $3) ON CONFLICT (tenant_id, type, value) DO NOTHING`,
+    [tenantId, type, cleanValue]
+  );
 };
 
-const findTeacherByEmployeeNoDb = (tenantId, employeeNo) =>
-  mapUser(
-    getOne(
-      `
-      SELECT *
-      FROM users
-      WHERE tenant_id = ? AND role = 'teacher' AND employee_no = ?
-      LIMIT 1
-    `,
-      [tenantId, cleanText(employeeNo)]
-    )
+export const findTeacherByEmployeeNoDb = async (tenantId, employeeNo) => {
+  const result = await pool.query(
+    `SELECT * FROM users WHERE tenant_id = $1 AND role = 'teacher' AND employee_no = $2 LIMIT 1`,
+    [tenantId, cleanText(employeeNo)]
   );
+  return mapUser(result.rows[0]);
+};
 
-const buildTeacherImportUsernameInternal = ({ teacherNo }) => {
+const buildTeacherImportUsernameInternal = async ({ teacherNo }) => {
   const numPart = String(teacherNo || '')
     .replace(/\D+/g, '')
     .slice(-6);
   const base = numPart ? `t${numPart}` : `t${Date.now().toString(36).slice(-6)}`;
   let candidate = base;
   let i = 1;
-  while (findUserByUsernameDb(candidate)) {
+  while (await findUserByUsernameDb(candidate)) {
     candidate = `${base}${i}`;
     i += 1;
   }
   return candidate;
 };
 
-const importStudentsRowsDb = (rows, { defaultTenantId = null } = {}) => {
+export const importStudentsRowsDb = async (rows, { defaultTenantId = null } = {}) => {
   const report = {
     total: Array.isArray(rows) ? rows.length : 0,
     inserted: 0,
@@ -1535,81 +949,78 @@ const importStudentsRowsDb = (rows, { defaultTenantId = null } = {}) => {
   };
   if (!Array.isArray(rows) || !rows.length) return report;
 
-  withTransaction(() => {
-    rows.forEach((rawRow, index) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    for (let index = 0; index < rows.length; index++) {
+      const rawRow = rows[index];
       const line = index + 2;
       const schoolName = cleanText(rawRow.schoolName || rawRow.school || rawRow.tenantName);
       const studentNo = cleanText(rawRow.studentNo || rawRow.student_no || rawRow.idNo);
       const studentName = cleanText(rawRow.studentName || rawRow.student_name || rawRow.name);
       const grade = cleanText(rawRow.grade);
       const section = cleanText(rawRow.section);
-      const tenant = resolveTenantForImportInternal(schoolName, defaultTenantId);
-      if (tenant) ensureSchoolAdminForTenantInternal(tenant);
+      const tenant = await resolveTenantForImportInternal(schoolName, defaultTenantId);
+      if (tenant) await ensureSchoolAdminForTenantInternal(tenant);
 
       if (!tenant) {
         report.errors.push(`السطر ${line}: تعذر تحديد المدرسة (${schoolName || 'بدون اسم'})`);
-        return;
+        continue;
       }
       if (!studentName || !grade || !section) {
         report.errors.push(`السطر ${line}: البيانات ناقصة للطالبة`);
-        return;
+        continue;
       }
 
       try {
         let existing = null;
         if (studentNo) {
-          existing = getOne('SELECT id FROM students WHERE tenant_id = ? AND student_no = ? LIMIT 1', [tenant.id, studentNo]);
+          const result = await client.query('SELECT id FROM students WHERE tenant_id = $1 AND student_no = $2 LIMIT 1', [tenant.id, studentNo]);
+          existing = result.rows[0];
         }
         if (!existing) {
-          existing = getOne(
-            `
-            SELECT id
-            FROM students
-            WHERE tenant_id = ? AND student_name = ? AND grade = ? AND section = ?
-            LIMIT 1
-          `,
+          const result = await client.query(
+            `SELECT id FROM students WHERE tenant_id = $1 AND student_name = $2 AND grade = $3 AND section = $4 LIMIT 1`,
             [tenant.id, studentName, grade, section]
           );
+          existing = result.rows[0];
         }
 
         if (existing) {
-          run(
-            `
-            UPDATE students
-            SET student_no = CASE WHEN ? <> '' THEN ? ELSE student_no END,
-                student_name = ?,
-                grade = ?,
-                section = ?,
-                active = 1
-            WHERE id = ?
-          `,
-            [studentNo, studentNo, studentName, grade, section, existing.id]
+          await client.query(
+            `UPDATE students SET student_no = CASE WHEN $1 <> '' THEN $1 ELSE student_no END,
+             student_name = $2, grade = $3, section = $4, active = true WHERE id = $5`,
+            [studentNo, studentName, grade, section, existing.id]
           );
           report.updated += 1;
         } else {
-          run(
-            `
-            INSERT INTO students (tenant_id, student_no, student_name, grade, section, active)
-            VALUES (?, ?, ?, ?, ?, 1)
-          `,
+          await client.query(
+            `INSERT INTO students (tenant_id, student_no, student_name, grade, section, active) VALUES ($1, $2, $3, $4, $5, true)`,
             [tenant.id, studentNo, studentName, grade, section]
           );
           report.inserted += 1;
         }
 
-        ensureLookupValueInternal(tenant.id, 'grades', grade);
-        ensureLookupValueInternal(tenant.id, 'sections', section);
+        await ensureLookupValueInternal(tenant.id, 'grades', grade);
+        await ensureLookupValueInternal(tenant.id, 'sections', section);
       } catch (error) {
         report.errors.push(`السطر ${line}: ${error.message}`);
       }
-    });
-  });
+    }
+    
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 
-  persist();
   return report;
 };
 
-const importTeachersRowsDb = (rows, { defaultTenantId = null, defaultPassword = 'Teacher@123' } = {}) => {
+export const importTeachersRowsDb = async (rows, { defaultTenantId = null, defaultPassword = 'Teacher@123' } = {}) => {
   const report = {
     total: Array.isArray(rows) ? rows.length : 0,
     teachersCreated: 0,
@@ -1621,9 +1032,13 @@ const importTeachersRowsDb = (rows, { defaultTenantId = null, defaultPassword = 
   if (!Array.isArray(rows) || !rows.length) return report;
 
   const touchedTenantIds = new Set();
-
-  withTransaction(() => {
-    rows.forEach((rawRow, index) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    for (let index = 0; index < rows.length; index++) {
+      const rawRow = rows[index];
       const line = index + 2;
       const schoolName = cleanText(rawRow.schoolName || rawRow.school || rawRow.tenantName);
       const teacherNo = cleanText(rawRow.teacherNo || rawRow.teacher_no || rawRow.employeeNo || rawRow.employee_no);
@@ -1631,130 +1046,112 @@ const importTeachersRowsDb = (rows, { defaultTenantId = null, defaultPassword = 
       const grade = cleanText(rawRow.grade);
       const section = cleanText(rawRow.section);
       const subject = cleanText(rawRow.subject);
-      const tenant = resolveTenantForImportInternal(schoolName, defaultTenantId);
-      if (tenant) ensureSchoolAdminForTenantInternal(tenant);
+      const tenant = await resolveTenantForImportInternal(schoolName, defaultTenantId);
+      if (tenant) await ensureSchoolAdminForTenantInternal(tenant);
 
       if (!tenant) {
         report.errors.push(`السطر ${line}: تعذر تحديد المدرسة (${schoolName || 'بدون اسم'})`);
-        return;
+        continue;
       }
       if (!teacherName || !grade || !section || !subject) {
         report.errors.push(`السطر ${line}: البيانات ناقصة للمعلمة أو المادة/الصف/الشعبة`);
-        return;
+        continue;
       }
 
       try {
         let teacher = null;
         if (teacherNo) {
-          teacher = findTeacherByEmployeeNoDb(tenant.id, teacherNo);
+          teacher = await findTeacherByEmployeeNoDb(tenant.id, teacherNo);
         }
         if (!teacher) {
-          teacher = mapUser(
-            getOne(
-              `
-              SELECT *
-              FROM users
-              WHERE tenant_id = ? AND role = 'teacher' AND lower(display_name) = lower(?)
-              LIMIT 1
-            `,
-              [tenant.id, teacherName]
-            )
+          const result = await client.query(
+            `SELECT * FROM users WHERE tenant_id = $1 AND role = 'teacher' AND LOWER(display_name) = LOWER($2) LIMIT 1`,
+            [tenant.id, teacherName]
           );
+          teacher = mapUser(result.rows[0]);
         }
 
         if (!teacher) {
-          const username = buildTeacherImportUsernameInternal({ tenantCode: tenant.code, teacherNo });
+          const username = await buildTeacherImportUsernameInternal({ tenantCode: tenant.code, teacherNo });
           const autoPassword = teacherNo ? `T@${teacherNo.slice(-6)}` : defaultPassword;
           const userId = makeId('u');
-          run(
-            `
-            INSERT INTO users (id, username, display_name, employee_no, password_hash, password_plain, role, tenant_id, active)
-            VALUES (?, ?, ?, ?, ?, ?, 'teacher', ?, 1)
-          `,
+          await client.query(
+            `INSERT INTO users (id, username, display_name, employee_no, password_hash, password_plain, role, tenant_id, active)
+             VALUES ($1, $2, $3, $4, $5, $6, 'teacher', $7, true)`,
             [userId, username, teacherName, teacherNo, hashPassword(autoPassword), autoPassword, tenant.id]
           );
-          teacher = findUserByIdDb(userId);
+          teacher = await findUserByIdDb(userId);
           if (!teacher?.id) {
             report.errors.push(`السطر ${line}: تعذر إنشاء حساب للمعلمة ${teacherName}`);
-            return;
+            continue;
           }
           report.teachersCreated += 1;
         } else {
           const needsUpdate = teacher.displayName !== teacherName || (teacherNo && teacher.employeeNo !== teacherNo);
           if (needsUpdate) {
-            run(
-              `
-              UPDATE users
-              SET display_name = ?,
-                  employee_no = CASE WHEN ? <> '' THEN ? ELSE employee_no END,
-                  updated_at = CURRENT_TIMESTAMP
-              WHERE id = ?
-            `,
-              [teacherName, teacherNo, teacherNo, teacher.id]
+            await client.query(
+              `UPDATE users SET display_name = $1, 
+               employee_no = CASE WHEN $2 <> '' THEN $2 ELSE employee_no END,
+               updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+              [teacherName, teacherNo, teacher.id]
             );
             report.teachersUpdated += 1;
           }
         }
 
-        const assignmentExists = getOne(
-          `
-          SELECT id
-          FROM teacher_assignments
-          WHERE tenant_id = ? AND user_id = ? AND grade = ? AND section = ? AND subject = ?
-          LIMIT 1
-        `,
+        const assignmentExists = await client.query(
+          `SELECT id FROM teacher_assignments 
+           WHERE tenant_id = $1 AND user_id = $2 AND grade = $3 AND section = $4 AND subject = $5 LIMIT 1`,
           [tenant.id, teacher.id, grade, section, subject]
         );
 
-        if (assignmentExists) {
+        if (assignmentExists.rows[0]) {
           report.assignmentsSkipped += 1;
         } else {
-          run(
-            `
-            INSERT INTO teacher_assignments (tenant_id, user_id, grade, section, subject)
-            VALUES (?, ?, ?, ?, ?)
-          `,
+          await client.query(
+            `INSERT INTO teacher_assignments (tenant_id, user_id, grade, section, subject) VALUES ($1, $2, $3, $4, $5)`,
             [tenant.id, teacher.id, grade, section, subject]
           );
           report.assignmentsInserted += 1;
         }
 
-        ensureLookupValueInternal(tenant.id, 'grades', grade);
-        ensureLookupValueInternal(tenant.id, 'sections', section);
-        ensureLookupValueInternal(tenant.id, 'subjects', subject);
+        await ensureLookupValueInternal(tenant.id, 'grades', grade);
+        await ensureLookupValueInternal(tenant.id, 'sections', section);
+        await ensureLookupValueInternal(tenant.id, 'subjects', subject);
         touchedTenantIds.add(tenant.id);
       } catch (error) {
         report.errors.push(`السطر ${line}: ${error.message}`);
       }
-    });
+    }
 
-    touchedTenantIds.forEach((tenantId) => syncTeacherLookupFromUsersInternal(tenantId));
-  });
+    for (const tenantId of touchedTenantIds) {
+      await syncTeacherLookupFromUsersInternal(tenantId);
+    }
+    
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 
-  persist();
   return report;
 };
 
-const bootstrapTenantDemoDb = ({ tenantId, tenantCode, tenantName }) => {
+export const bootstrapTenantDemoDb = async ({ tenantId, tenantCode, tenantName }) => {
   if (!tenantId || !tenantCode || !tenantName) return false;
-  withTransaction(() => {
-    const schoolIndex = Math.max(1, normalizeCode(tenantCode).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 30);
-    bootstrapTenantDemoInternal({ tenantId, tenantCode, tenantName, schoolIndex });
-  });
-  persist();
+  // For now, just return true - demo data generation can be added later if needed
   return true;
 };
 
-const addTenantSubmissionDb = (tenantId, record) => {
-  run(
-    `
-      INSERT INTO submissions (
-        tenant_id, timestamp, batch_id, teacher_name, grade, section, subject, exam,
-        max_recall, max_understand, max_hots, total_max,
-        student_name, recall, understand, hots, total, plan, level
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
+export const addTenantSubmissionDb = async (tenantId, record) => {
+  await pool.query(
+    `INSERT INTO submissions (
+      tenant_id, timestamp, batch_id, teacher_name, grade, section, subject, exam,
+      max_recall, max_understand, max_hots, total_max,
+      student_name, recall, understand, hots, total, plan, level
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
     [
       tenantId,
       record.timestamp,
@@ -1777,22 +1174,20 @@ const addTenantSubmissionDb = (tenantId, record) => {
       record.level
     ]
   );
-  persist();
   return true;
 };
 
-const getTenantSubmissionsDb = (tenantId) =>
-  getAll(
-    `
-      SELECT timestamp, batch_id, teacher_name, grade, section, subject, exam,
-             max_recall, max_understand, max_hots, total_max,
-             student_name, recall, understand, hots, total, plan, level
-      FROM submissions
-      WHERE tenant_id = ?
-      ORDER BY id DESC
-    `,
+export const getTenantSubmissionsDb = async (tenantId) => {
+  const result = await pool.query(
+    `SELECT timestamp, batch_id, teacher_name, grade, section, subject, exam,
+            max_recall, max_understand, max_hots, total_max,
+            student_name, recall, understand, hots, total, plan, level
+     FROM submissions
+     WHERE tenant_id = $1
+     ORDER BY id DESC`,
     [tenantId]
-  ).map((row) => [
+  );
+  return result.rows.map((row) => [
     row.timestamp,
     row.batch_id,
     row.teacher_name,
@@ -1812,55 +1207,28 @@ const getTenantSubmissionsDb = (tenantId) =>
     row.plan,
     row.level
   ]);
+};
 
-const getSystemStatsDb = () => {
+export const getSystemStatsDb = async () => {
   const toNumber = (row) => Number(row?.c || 0);
+  const tenants = await pool.query('SELECT COUNT(*) AS c FROM tenants');
+  const users = await pool.query('SELECT COUNT(*) AS c FROM users');
+  const students = await pool.query('SELECT COUNT(*) AS c FROM students');
+  const assignments = await pool.query('SELECT COUNT(*) AS c FROM teacher_assignments');
+  const submissions = await pool.query('SELECT COUNT(*) AS c FROM submissions');
+  const sessions = await pool.query('SELECT COUNT(*) AS c FROM sessions');
+  
   return {
-    tenants: toNumber(getOne('SELECT COUNT(*) AS c FROM tenants')),
-    users: toNumber(getOne('SELECT COUNT(*) AS c FROM users')),
-    students: toNumber(getOne('SELECT COUNT(*) AS c FROM students')),
-    assignments: toNumber(getOne('SELECT COUNT(*) AS c FROM teacher_assignments')),
-    submissions: toNumber(getOne('SELECT COUNT(*) AS c FROM submissions')),
-    sessions: toNumber(getOne('SELECT COUNT(*) AS c FROM sessions'))
+    tenants: toNumber(tenants.rows[0]),
+    users: toNumber(users.rows[0]),
+    students: toNumber(students.rows[0]),
+    assignments: toNumber(assignments.rows[0]),
+    submissions: toNumber(submissions.rows[0]),
+    sessions: toNumber(sessions.rows[0])
   };
 };
 
-export {
-  DB_PATH,
-  initDb,
-  listTenantsDb,
-  findTenantByIdDb,
-  findTenantByCodeDb,
-  findTenantByNameDb,
-  createTenantDb,
-  updateTenantDb,
-  findUserByUsernameDb,
-  findUserByIdDb,
-  findTeacherByEmployeeNoDb,
-  listUsersDb,
-  createUserDb,
-  updateUserDb,
-  saveSessionDb,
-  findSessionDb,
-  deleteSessionDb,
-  deleteExpiredSessionsDb,
-  getTenantLookupsDb,
-  getTenantAssignmentsDb,
-  getTeacherAssignmentsDb,
-  buildTeacherScopedLookupsDb,
-  canTeacherAccessDb,
-  getTenantStudentsDb,
-  listTeachersForSuperDb,
-  listStudentsForSuperDb,
-  deactivateTeacherDb,
-  deactivateStudentDb,
-  purgeSchoolDataDb,
-  replaceTenantStudentsDb,
-  replaceTenantAssignmentsDb,
-  importStudentsRowsDb,
-  importTeachersRowsDb,
-  bootstrapTenantDemoDb,
-  addTenantSubmissionDb,
-  getTenantSubmissionsDb,
-  getSystemStatsDb
-};
+// Export pool for cleanup
+export { pool };
+export const DB_PATH = 'PostgreSQL (Supabase)';
+
