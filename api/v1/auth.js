@@ -1,5 +1,5 @@
-import { initDb, findUserByUsernameDb, findTenantByCodeDb, findTenantByIdDb, findUserByIdDb, saveSessionDb, deleteSessionDb } from '../lib/db.js';
-import { createSession, verifyPassword } from '../lib/security.js';
+import { initDb, findUserByUsernameDb, findTenantByCodeDb, findTenantByIdDb, findUserByIdDb, updateUserDb, saveSessionDb, deleteSessionDb } from '../lib/db.js';
+import { createSession, verifyPassword, hashPassword } from '../lib/security.js';
 import { withCors, withAuth, cleanText, sanitizeUser } from '../lib/middleware.js';
 
 async function authHandler(req, res) {
@@ -68,6 +68,45 @@ async function authHandler(req, res) {
         user: user ? sanitizeUser(user) : null,
         tenant
       });
+    }
+
+    // PATCH /api/v1/auth/account
+    if (path.endsWith('/account') && req.method === 'PATCH') {
+      const currentPassword = cleanText(req.body?.currentPassword);
+      const newUsername = cleanText(req.body?.newUsername).toLowerCase();
+      const newPassword = cleanText(req.body?.newPassword);
+      const newDisplayName = cleanText(req.body?.newDisplayName);
+
+      if (!currentPassword) {
+        return res.status(400).json({ ok: false, error: 'currentPassword is required' });
+      }
+
+      const user = findUserByIdDb(req.auth.userId);
+      if (!user || !user.active) {
+        return res.status(404).json({ ok: false, error: 'User not found' });
+      }
+      if (!verifyPassword(currentPassword, user.passwordHash)) {
+        return res.status(401).json({ ok: false, error: 'Current password is incorrect' });
+      }
+
+      const payload = {};
+      if (newUsername && newUsername !== user.username) payload.username = newUsername;
+      if (newPassword) {
+        payload.passwordHash = hashPassword(newPassword);
+        payload.passwordPlain = newPassword;
+      }
+      if (newDisplayName) payload.displayName = newDisplayName;
+
+      if (!Object.keys(payload).length) {
+        return res.status(400).json({ ok: false, error: 'No updates provided' });
+      }
+
+      const updated = updateUserDb(user.id, payload);
+      if (!updated) {
+        return res.status(409).json({ ok: false, error: 'Unable to update account (username may already exist)' });
+      }
+
+      return res.json({ ok: true, user: sanitizeUser(updated) });
     }
 
     return res.status(404).json({ ok: false, error: 'Not found' });
