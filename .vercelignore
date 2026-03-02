@@ -1,0 +1,10 @@
+backend/
+frontend/
+node_modules/
+.git/
+*.md
+!README.md
+!README.vercel.md
+.env.local
+.env
+data/
